@@ -1,6 +1,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
+#include <avr/io.h>
 
 // DOC: sitronix_st7789_datasheet.pdf
 // Section 9.1: System function command table 1
@@ -53,6 +54,7 @@ constexpr struct {
   uint8_t READ_ID3 = 0xDC;
 } TFT_CMD;
 
+// DOC: sitronix_st7789_datasheet.pdf
 // Section 8.8.3: 8-bit data bus for 16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors
 // r = 32, g = 64, b = 32, rgb = 32*64*32 = 65536
 uint16_t create_tft_colour(uint8_t r, uint8_t g, uint8_t b) {
@@ -92,9 +94,20 @@ constexpr uint16_t TFT_X_END = TFT_X_START + TFT_WIDTH;
 constexpr uint16_t TFT_Y_START = 20;
 constexpr uint16_t TFT_Y_END = TFT_Y_START + TFT_HEIGHT;
 
-static SPISettings TFT_SPI_SETTINGS;
+void tft_spi_init() {
+  // DOC: atmel_atmega328p_datasheet.pdf
+  // Section 18.5: SPI Register description
+  // DORD=0: MSB first
+  // MSTR=1: Master mode
+  // CPOL=1: Clock high when idle
+  // CPHA=0: Data sampled on leading edge of clock
+  // SPI2X=1,SPR1=0,SPR0=0: f_spi = f_clock/2
+  // Hardware SPI has SCLK=13, MOSI=11
+  SPCR = (1 << SPE) | (0 << DORD) | (1 << MSTR) | (1 << CPOL) | (0 << CPHA) | (0 << SPR1) | (0 << SPR0);
+  SPSR = (1 << SPI2X);
+}
+
 void tft_init() {
-  TFT_SPI_SETTINGS = SPISettings(8000000, MSBFIRST, SPI_MODE2);
   // default pin setup
   pinMode(TFT_PIN.CHIP_SELECT, OUTPUT);
   pinMode(TFT_PIN.RESET, OUTPUT);
@@ -102,31 +115,32 @@ void tft_init() {
   pinMode(TFT_PIN.BACKLIGHT, OUTPUT);
   pinMode(TFT_PIN.MOSI, OUTPUT);
   pinMode(TFT_PIN.SCLK, OUTPUT);
-  digitalWrite(TFT_PIN.CHIP_SELECT, HIGH);
   digitalWrite(TFT_PIN.RESET, HIGH);
-  digitalWrite(TFT_PIN.DATA_COMMAND, LOW);
-  // init hardware spi
-  SPI.begin();
+  
+  tft_spi_init();
+  tft_spi_disable_chip_select();
 
+  // default state
   tft_hardware_reset();
   tft_set_brightness(0);
 
   // init commands
-  tft_send_command(TFT_CMD.SOFTWARE_RESET);
+  tft_write_command(TFT_CMD.SOFTWARE_RESET);
   delay(150);
-  tft_send_command(TFT_CMD.SLEEP_OUT);
+  tft_write_command(TFT_CMD.SLEEP_OUT);
   delay(255);
-  
+
+  // DOC: sitronix_st7789_datasheet.pdf 
   // Section 9.1.32: Interface Pixel Format
-  tft_send_command(TFT_CMD.INTERFACE_PIXEL_FORMAT);
+  tft_write_command(TFT_CMD.INTERFACE_PIXEL_FORMAT);
   // D6:D4=101: 65k colours
   // D2:D0=101: 16bit/pixel
-  tft_send_data(0b01010101); 
+  tft_write_data(0b01010101); 
   // Section 8.8.3: 8-bit data bus for 16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors
   delay(10);
   
   // Section 9.1.28: Memory data access control
-  tft_send_command(TFT_CMD.MEMORY_DATA_ACCESS_CONTROL);
+  tft_write_command(TFT_CMD.MEMORY_DATA_ACCESS_CONTROL);
   // D7=0: top to bottom
   // D6=0: left to right
   // D5=0: normal mode
@@ -134,27 +148,27 @@ void tft_init() {
   // D3=0: RGB instead of BGR
   // D2=0: LCD refreshes from left to right
   // D1:D0=x: unused
-  tft_send_data(0b00000000);
+  tft_write_data(0b00000000);
 
   // Section 9.1.20: Column address set
-  tft_send_command(TFT_CMD.COLUMN_ADDRESS_SET);
-  tft_send_data(static_cast<uint8_t>(TFT_X_START >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_X_START & 0x00FF));
-  tft_send_data(static_cast<uint8_t>(TFT_X_END >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_X_END & 0x00FF));
+  tft_write_command(TFT_CMD.COLUMN_ADDRESS_SET);
+  tft_write_data(static_cast<uint8_t>(TFT_X_START >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_X_START & 0x00FF));
+  tft_write_data(static_cast<uint8_t>(TFT_X_END >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_X_END & 0x00FF));
 
   // Section 9.1.21: Row address set
-  tft_send_command(TFT_CMD.ROW_ADDRESS_SET);
-  tft_send_data(static_cast<uint8_t>(TFT_Y_START >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_Y_START & 0x00FF));
-  tft_send_data(static_cast<uint8_t>(TFT_Y_END >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_Y_END & 0x00FF));
+  tft_write_command(TFT_CMD.ROW_ADDRESS_SET);
+  tft_write_data(static_cast<uint8_t>(TFT_Y_START >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_Y_START & 0x00FF));
+  tft_write_data(static_cast<uint8_t>(TFT_Y_END >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_Y_END & 0x00FF));
 
-  tft_send_command(TFT_CMD.DISPLAY_INVERSION_ON);
+  tft_write_command(TFT_CMD.DISPLAY_INVERSION_ON);
   delay(10);
-  tft_send_command(TFT_CMD.PARTIAL_MODE_OFF);
+  tft_write_command(TFT_CMD.PARTIAL_MODE_OFF);
   delay(10);
-  tft_send_command(TFT_CMD.DISPLAY_ON);
+  tft_write_command(TFT_CMD.DISPLAY_ON);
   delay(255);
 }
 
@@ -162,22 +176,40 @@ void tft_set_brightness(uint8_t brightness) {
   analogWrite(TFT_PIN.BACKLIGHT, brightness);
 }
 
-void tft_send_command(uint8_t command) {
-  digitalWrite(TFT_PIN.DATA_COMMAND, LOW);
-  digitalWrite(TFT_PIN.CHIP_SELECT, LOW);
-  SPI.beginTransaction(TFT_SPI_SETTINGS);
-  SPI.transfer(command);
-  digitalWrite(TFT_PIN.CHIP_SELECT, HIGH);
-  SPI.endTransaction();
+// avoid overhead of returning value through SPI.transfer(...)
+inline void tft_spi_write(uint8_t data) {
+  SPDR = data;
+  while ((SPSR & (1 << SPIF)) == 0x00) {}
 }
 
-void tft_send_data(uint8_t command) {
+inline void tft_enable_data_mode() {
   digitalWrite(TFT_PIN.DATA_COMMAND, HIGH);
+}
+
+inline void tft_enable_command_mode() {
+  digitalWrite(TFT_PIN.DATA_COMMAND, LOW);
+}
+
+inline void tft_spi_enable_chip_select() {
   digitalWrite(TFT_PIN.CHIP_SELECT, LOW);
-  SPI.beginTransaction(TFT_SPI_SETTINGS);
-  SPI.transfer(command);
+}
+
+inline void tft_spi_disable_chip_select() {
   digitalWrite(TFT_PIN.CHIP_SELECT, HIGH);
-  SPI.endTransaction();
+}
+
+inline void tft_write_command(uint8_t command) {
+  tft_enable_command_mode();
+  tft_spi_enable_chip_select();
+  tft_spi_write(command);
+  tft_spi_disable_chip_select();
+}
+
+inline void tft_write_data(uint8_t command) {
+  tft_enable_data_mode();
+  tft_spi_enable_chip_select();
+  tft_spi_write(command);
+  tft_spi_disable_chip_select();
 }
 
 void tft_hardware_reset() {
@@ -189,36 +221,32 @@ void tft_hardware_reset() {
 
 void tft_fill_screen(uint16_t colour) {
     // Section 9.1.20: Column address set
-  tft_send_command(TFT_CMD.COLUMN_ADDRESS_SET);
-  tft_send_data(static_cast<uint8_t>(TFT_X_START >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_X_START & 0x00FF));
-  tft_send_data(static_cast<uint8_t>(TFT_X_END >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_X_END & 0x00FF));
+  tft_write_command(TFT_CMD.COLUMN_ADDRESS_SET);
+  tft_write_data(static_cast<uint8_t>(TFT_X_START >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_X_START & 0x00FF));
+  tft_write_data(static_cast<uint8_t>(TFT_X_END >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_X_END & 0x00FF));
 
   // Section 9.1.21: Row address set
-  tft_send_command(TFT_CMD.ROW_ADDRESS_SET);
-  tft_send_data(static_cast<uint8_t>(TFT_Y_START >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_Y_START & 0x00FF));
-  tft_send_data(static_cast<uint8_t>(TFT_Y_END >> 8));
-  tft_send_data(static_cast<uint8_t>(TFT_Y_END & 0x00FF));
+  tft_write_command(TFT_CMD.ROW_ADDRESS_SET);
+  tft_write_data(static_cast<uint8_t>(TFT_Y_START >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_Y_START & 0x00FF));
+  tft_write_data(static_cast<uint8_t>(TFT_Y_END >> 8));
+  tft_write_data(static_cast<uint8_t>(TFT_Y_END & 0x00FF));
 
-  tft_send_command(TFT_CMD.MEMORY_WRITE);
+  tft_write_command(TFT_CMD.MEMORY_WRITE);
   // write pixel data
-  digitalWrite(TFT_PIN.DATA_COMMAND, HIGH);
-  digitalWrite(TFT_PIN.CHIP_SELECT, LOW);
-  SPI.beginTransaction(TFT_SPI_SETTINGS);
+  tft_enable_data_mode();
+  tft_spi_enable_chip_select();
   const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
   const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
   for (uint16_t y = 0; y < TFT_HEIGHT; y++) {
     for (uint16_t x = 0; x < TFT_WIDTH; x++) {
-      SPI.transfer(colour_high);
-      SPI.transfer(colour_low);
+      tft_spi_write(colour_high);
+      tft_spi_write(colour_low);
     }
   }
-  digitalWrite(TFT_PIN.CHIP_SELECT, HIGH);
-  SPI.endTransaction();
-  // terminate memory write command
-  tft_send_command(TFT_CMD.NO_OPERATION);
+  tft_spi_disable_chip_select();
 }
 
 void setup(void) {
@@ -241,6 +269,6 @@ static uint16_t TEST_COLOURS[TOTAL_TEST_COLOURS] = {
 void loop() {
   for (int i = 0; i < TOTAL_TEST_COLOURS; i++) {
     tft_fill_screen(TEST_COLOURS[i]);
-    delay(500);
+    //delay(500);
   }
 }
