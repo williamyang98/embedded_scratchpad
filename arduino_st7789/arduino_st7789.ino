@@ -179,7 +179,25 @@ void tft_set_brightness(uint8_t brightness) {
 // avoid overhead of returning value through SPI.transfer(...)
 inline void tft_spi_write(uint8_t data) {
   SPDR = data;
-  while ((SPSR & (1 << SPIF)) == 0x00) {}
+  // 8 bits, at fclk/2 = 16 cycles
+  asm volatile(
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+    "nop\n"
+  );
 }
 
 inline void tft_enable_data_mode() {
@@ -240,16 +258,18 @@ void tft_fill_screen(uint16_t colour) {
   tft_spi_enable_chip_select();
   const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
   const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
-  for (uint16_t y = 0; y < TFT_HEIGHT; y++) {
-    for (uint16_t x = 0; x < TFT_WIDTH; x++) {
-      tft_spi_write(colour_high);
-      tft_spi_write(colour_low);
-    }
+
+  const uint32_t total_pixels = static_cast<uint32_t>(TFT_WIDTH) * static_cast<uint32_t>(TFT_HEIGHT);
+  for (uint32_t i = 0; i < total_pixels; i++) {
+    tft_spi_write(colour_high);
+    tft_spi_write(colour_low);
   }
   tft_spi_disable_chip_select();
 }
 
 void setup(void) {
+  Serial.begin(9600);
+  Serial.println("Custom library test");
   tft_init();
   tft_set_brightness(50);
 }
@@ -267,8 +287,16 @@ static uint16_t TEST_COLOURS[TOTAL_TEST_COLOURS] = {
 };
 
 void loop() {
-  for (int i = 0; i < TOTAL_TEST_COLOURS; i++) {
-    tft_fill_screen(TEST_COLOURS[i]);
-    //delay(500);
+  int loop_size = 1;
+  uint32_t millis_start = millis();
+
+  for (int i = 0; i < loop_size; i++) {
+    for (int i = 0; i < TOTAL_TEST_COLOURS; i++) {
+      tft_fill_screen(TEST_COLOURS[i]);
+    }
   }
+
+  uint32_t millis_end = millis();
+  uint32_t millis_elapsed = millis_end-millis_start;
+  Serial.println(millis_elapsed);
 }
