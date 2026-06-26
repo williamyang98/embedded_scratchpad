@@ -1,6 +1,3 @@
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
-#include <SPI.h>
 #include <avr/io.h>
 
 // DOC: sitronix_st7789_datasheet.pdf
