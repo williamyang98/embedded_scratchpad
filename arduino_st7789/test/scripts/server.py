@@ -22,13 +22,17 @@ class App:
         return websocket
 
     async def launch_process(self, websocket):
-        proc = subprocess.Popen(
-            [self.exec_filepath],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        loop = asyncio.get_running_loop()
+        try:
+            proc = subprocess.Popen(
+                [self.exec_filepath],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except FileNotFoundError as ex:
+            logging.error(f"Failed to launch process: {ex}")
+            return
 
+        loop = asyncio.get_running_loop()
         sent_message_futures = []
         def track_message_futures(func):
             def tracked_func(*args, **kwargs):
@@ -112,7 +116,7 @@ class App:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("executable", nargs="?", default="../build/msvc/st7789.exe")
+    parser.add_argument("executable", nargs="?", default="../build/st7789.exe")
     parser.add_argument("--static-dirpath", default="./static")
     args = parser.parse_args()
 

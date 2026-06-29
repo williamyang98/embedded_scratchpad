@@ -19,8 +19,8 @@ typedef uint16_t RGB565 ;
 
 class Image {
 private:
-    const int m_height;
     const int m_width;
+    const int m_height;
     const int m_total_pixels;
     std::vector<RGB565> m_data;
 public:

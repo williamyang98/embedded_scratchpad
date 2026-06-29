@@ -69,7 +69,7 @@ watch(selected_frame, (selected_frame) => {
   <input type="checkbox" v-model.boolean="is_pin_frame"/>
 </div>
 <form>
-  <input type="number" v-model.number="selected_frame_index" min="0", :max="frames.length-1" :disabled="frames.length === 0"/>/<span>{{ frames.length-1 }}</span>
+  <input type="number" v-model.number="selected_frame_index" min="0", :max="frames.length-1" :disabled="frames.length === 0"/>/<span>{{ frames.length > 0 ? frames.length-1 : '?' }}</span>
   <input type="range" v-model.number="selected_frame_index" min="0" :max="frames.length-1" :disabled="frames.length === 0" step="1"/>
 </form>
 <div v-if="selected_frame === undefined">Waiting for frame</div>
