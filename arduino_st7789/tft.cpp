@@ -3,8 +3,6 @@
 #include <avr/io.h>
 #include <Arduino.h>
 
-using namespace tft;
-
 // Section 9.1: System function command table 1
 constexpr struct {
   uint8_t NO_OPERATION = 0x00;
@@ -81,17 +79,14 @@ void init() {
   SPSR = (1 << SPI2X);
 }
 
-template <int N = 0>
+
 void write_byte(uint8_t data) {
   SPDR = data;
-
   // avoid overhead of returning value through SPI.transfer(...)
   // this polling loop is slower than a fixed number of nops
   // while (!(SPSR & (1 << SPIF))) {}
-
-  // 8 bits, at fclk/2 = 16 cycles by default
-  // can specify custom cycles to shave off if we know there are instructions that will occupy the time it takes to transmit spi byte
-  nop<16-N>();
+  // 8 bits, at f_spi = f_clock/2 means 16 cycles
+  nop<16>();
 }
 
 void chip_select(bool is_selected) {
@@ -123,8 +118,6 @@ void write_data_byte(uint8_t data) {
 
 };
 
-
-
 void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
   // Section 9.1.20: Column address set
   spi::write_command_byte(CMD.COLUMN_ADDRESS_SET);
@@ -139,8 +132,8 @@ void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
 
 void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
   // Section 9.1.21: Row address set
-  y_start += ADDRESS_Y_OFFSET;
-  y_end += ADDRESS_Y_OFFSET;
+  y_start += tft::ADDRESS_Y_OFFSET;
+  y_end += tft::ADDRESS_Y_OFFSET;
   spi::write_command_byte(CMD.ROW_ADDRESS_SET);
   spi::set_mode(spi::Mode::DATA);
   spi::chip_select(true);
@@ -149,6 +142,12 @@ void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
   spi::write_byte(static_cast<uint8_t>(y_end >> 8));
   spi::write_byte(static_cast<uint8_t>(y_end & 0x00FF));
   spi::chip_select(false);
+}
+
+// endpoint is inclusive
+void tft::set_write_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uint16_t y_end) {
+  cmd_set_column_address(x_start, x_end);
+  cmd_set_row_address(y_start, y_end);
 }
 
 void tft::init() {
@@ -195,8 +194,7 @@ void tft::init() {
   spi::write_data_byte(0b00000000);
 
   
-  cmd_set_column_address(0, SCREEN_WIDTH);
-  cmd_set_row_address(0, SCREEN_HEIGHT);
+  tft::set_write_rect(0, SCREEN_WIDTH-1, 0, SCREEN_HEIGHT-1);
 
   spi::write_command_byte(CMD.DISPLAY_INVERSION_ON);
   delay(10);
@@ -217,26 +215,33 @@ void tft::hardware_reset() {
   delay(50);
 }
 
-void tft::fill_screen(rgb565_t colour) {
-  cmd_set_column_address(0, SCREEN_WIDTH);
-  cmd_set_row_address(0, SCREEN_HEIGHT);
-
+void tft::begin_write_pixel() {
   spi::write_command_byte(CMD.MEMORY_WRITE);
-  // write pixel data
   spi::set_mode(spi::Mode::DATA);
   spi::chip_select(true);
+}
+
+void tft::end_write_pixel() {
+  spi::chip_select(false);
+}
+
+void tft::fill_screen(rgb565_t colour) {
+  tft::set_write_rect(0, SCREEN_WIDTH-1, 0, SCREEN_HEIGHT-1);
+  tft::begin_write_pixel();
   const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
   const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
   for (uint16_t y = 0; y < SCREEN_HEIGHT; y++) {
     for (uint16_t x = 0; x < SCREEN_WIDTH; x++) {
       spi::write_byte(colour_high);
-      // remove a few cycles used by for loop branch checking
-      // made worse since we are using 16bit arithmetic which slows down 8bit processor
-      // i++ = 2 cycles for adiw
-      // i < total_pixels = 2 cycles for upper and lower byte sing cp and cpc
-      // branchlo = 1-2 cycles, 1 if branch taken, 2 if branch missed
-      spi::write_byte<5>(colour_low); 
+      spi::write_byte(colour_low);
     }
   }
-  spi::chip_select(false);
+  tft::end_write_pixel();
+}
+
+void tft::write_pixel(rgb565_t colour) {
+  const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
+  const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
+  spi::write_byte(colour_high);
+  spi::write_byte(colour_low); 
 }
