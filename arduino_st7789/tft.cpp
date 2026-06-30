@@ -1,0 +1,242 @@
+#include "tft.hpp"
+#include "utility.hpp"
+#include <avr/io.h>
+#include <Arduino.h>
+
+using namespace tft;
+
+// Section 9.1: System function command table 1
+constexpr struct {
+  uint8_t NO_OPERATION = 0x00;
+  uint8_t SOFTWARE_RESET = 0x01;
+  uint8_t READ_DISPLAY_ID = 0x04;
+  uint8_t READ_DISPLAY_STATUS = 0x09;
+  uint8_t READ_DISPLAY_POWER = 0x0A;
+  uint8_t READ_DISPLAY = 0x0B;
+  uint8_t READ_DISPLAY_PIXEL = 0x0C;
+  uint8_t READ_DISPLAY_IMAGE = 0x0D;
+  uint8_t READ_DISPLAY_SIGNAL = 0x0E;
+  uint8_t READ_DISPLAY_SELF_DIAGNOSTIC = 0x0F;
+  uint8_t SLEEP_IN = 0x10;
+  uint8_t SLEEP_OUT = 0x11;
+  uint8_t PARTIAL_MODE_ON = 0x12;
+  uint8_t PARTIAL_MODE_OFF = 0x13;
+  uint8_t DISPLAY_INVERSION_OFF = 0x20;
+  uint8_t DISPLAY_INVERSION_ON = 0x21;
+  uint8_t DISPLAY_OFF = 0x28;
+  uint8_t DISPLAY_ON = 0x29;
+  uint8_t COLUMN_ADDRESS_SET = 0x2A;
+  uint8_t ROW_ADDRESS_SET = 0x2B;
+  uint8_t MEMORY_WRITE = 0x2C;
+  uint8_t MEMORY_READ = 0x2E;
+  uint8_t PARTIAL_ADDRESS_SET = 0x30;
+  uint8_t VERTICAL_SCROLLING_DEFINITION = 0x33;
+  uint8_t TEARING_EFFECT_LINE_OFF = 0x34;
+  uint8_t TEARING_EFFECT_LINE_ON = 0x35;
+  uint8_t MEMORY_DATA_ACCESS_CONTROL = 0x36;
+  uint8_t VERTICAL_SCROLLING_START_ADDRESS = 0x37;
+  uint8_t IDLE_MODE_OFF = 0x38;
+  uint8_t IDLE_MODE_ON = 0x39;
+  uint8_t INTERFACE_PIXEL_FORMAT = 0x3A;
+  uint8_t MEMORY_WRITE_CONTINUE = 0x3C;
+  uint8_t MEMORY_READ_CONTINUE = 0x3E;
+  uint8_t SET_TEAR_SCANLINE = 0x44;
+  uint8_t GET_SCANLINE = 0x45;
+  uint8_t WRITE_DISPLAY_BRIGHTNESS = 0x51;
+  uint8_t WRITE_CTRL_DISPLAY = 0x53;
+  uint8_t READ_CTRL_DISPLAY = 0x54;
+  uint8_t WRITE_CABC_COLOR_ENHANCEMENT = 0x55; // CABC = content adaptive brightness control
+  uint8_t READ_CABC_COLOR_ENHANCEMENT = 0x56;
+  uint8_t WRITE_CABC_MINIMUM_BRIGHTNESS = 0x5E;
+  uint8_t READ_CABC_MINIMUM_BRIGHTNESS = 0x5F;
+  uint8_t READ_AUTO_BRIGHTNESS_CONTROL_SELF_DIAGNOSTIC_RESULT = 0x68;
+  uint8_t READ_ID1 = 0xDA;
+  uint8_t READ_ID2 = 0xDB;
+  uint8_t READ_ID3 = 0xDC;
+} CMD;
+
+// Section 8.4.1: Pin description
+// 4 line serial interface I
+constexpr struct {
+  int8_t CHIP_SELECT = 10; // pull low to chip select 
+  int8_t RESET = 9; // pull low to reset display
+  int8_t DATA_COMMAND = 8; // low = command, high = data
+  int8_t BACKLIGHT = 6; // high to enable backlight
+  int8_t MOSI = 11; // spi tft as slave in
+  int8_t SCLK = 13; // spi clock
+} PIN;
+
+namespace spi {
+
+void init() {
+  // DOC: atmel_atmega328p_datasheet.pdf
+  // Section 18.5: SPI Register description
+  // DORD=0: MSB first
+  // MSTR=1: Master mode
+  // CPOL=1: Clock high when idle
+  // CPHA=0: Data sampled on leading edge of clock
+  // SPI2X=1,SPR1=0,SPR0=0: f_spi = f_clock/2
+  // Hardware SPI has SCLK=13, MOSI=11
+  SPCR = (1 << SPE) | (0 << DORD) | (1 << MSTR) | (1 << CPOL) | (0 << CPHA) | (0 << SPR1) | (0 << SPR0);
+  SPSR = (1 << SPI2X);
+}
+
+template <int N = 0>
+void write_byte(uint8_t data) {
+  SPDR = data;
+
+  // avoid overhead of returning value through SPI.transfer(...)
+  // this polling loop is slower than a fixed number of nops
+  // while (!(SPSR & (1 << SPIF))) {}
+
+  // 8 bits, at fclk/2 = 16 cycles by default
+  // can specify custom cycles to shave off if we know there are instructions that will occupy the time it takes to transmit spi byte
+  nop<16-N>();
+}
+
+void chip_select(bool is_selected) {
+  digitalWrite(PIN.CHIP_SELECT, is_selected ? LOW : HIGH);
+}
+
+enum class Mode: uint8_t {
+  COMMAND = 0,
+  DATA = 1,
+};
+
+void set_mode(Mode mode) {
+  digitalWrite(PIN.DATA_COMMAND, mode == Mode::COMMAND ? LOW : HIGH);
+}
+
+void write_command_byte(uint8_t command) {
+  set_mode(Mode::COMMAND);
+  chip_select(true);
+  write_byte(command);
+  chip_select(false);
+}
+
+void write_data_byte(uint8_t data) {
+  set_mode(Mode::DATA);
+  chip_select(true);
+  write_byte(data);
+  chip_select(false);
+}
+
+};
+
+
+
+void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
+  // Section 9.1.20: Column address set
+  spi::write_command_byte(CMD.COLUMN_ADDRESS_SET);
+  spi::set_mode(spi::Mode::DATA);
+  spi::chip_select(true);
+  spi::write_byte(static_cast<uint8_t>(x_start >> 8));
+  spi::write_byte(static_cast<uint8_t>(x_start & 0x00FF));
+  spi::write_byte(static_cast<uint8_t>(x_end >> 8));
+  spi::write_byte(static_cast<uint8_t>(x_end & 0x00FF));
+  spi::chip_select(false);
+}
+
+void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
+  // Section 9.1.21: Row address set
+  y_start += ADDRESS_Y_OFFSET;
+  y_end += ADDRESS_Y_OFFSET;
+  spi::write_command_byte(CMD.ROW_ADDRESS_SET);
+  spi::set_mode(spi::Mode::DATA);
+  spi::chip_select(true);
+  spi::write_byte(static_cast<uint8_t>(y_start >> 8));
+  spi::write_byte(static_cast<uint8_t>(y_start & 0x00FF));
+  spi::write_byte(static_cast<uint8_t>(y_end >> 8));
+  spi::write_byte(static_cast<uint8_t>(y_end & 0x00FF));
+  spi::chip_select(false);
+}
+
+void tft::init() {
+  // default pin setup
+  pinMode(PIN.CHIP_SELECT, OUTPUT);
+  pinMode(PIN.RESET, OUTPUT);
+  pinMode(PIN.DATA_COMMAND, OUTPUT);
+  pinMode(PIN.BACKLIGHT, OUTPUT);
+  pinMode(PIN.MOSI, OUTPUT);
+  pinMode(PIN.SCLK, OUTPUT);
+  digitalWrite(PIN.RESET, HIGH);
+  
+  spi::init();
+  spi::chip_select(false);
+
+  // default state
+  hardware_reset();
+  set_brightness(0);
+
+  // init commands
+  spi::write_command_byte(CMD.SOFTWARE_RESET);
+  delay(150);
+  spi::write_command_byte(CMD.SLEEP_OUT);
+  delay(255);
+
+  // DOC: sitronix_st7789_datasheet.pdf 
+  // Section 9.1.32: Interface Pixel Format
+  spi::write_command_byte(CMD.INTERFACE_PIXEL_FORMAT);
+  // D6:D4=101: 65k colours
+  // D2:D0=101: 16bit/pixel
+  spi::write_data_byte(0b01010101); 
+  // Section 8.8.3: 8-bit data bus for 16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors
+  delay(10);
+  
+  // Section 9.1.28: Memory data access control
+  spi::write_command_byte(CMD.MEMORY_DATA_ACCESS_CONTROL);
+  // D7=0: top to bottom
+  // D6=0: left to right
+  // D5=0: normal mode
+  // D4=0: LCD refreshes from top to bottom
+  // D3=0: RGB instead of BGR
+  // D2=0: LCD refreshes from left to right
+  // D1:D0=x: unused
+  spi::write_data_byte(0b00000000);
+
+  
+  cmd_set_column_address(0, SCREEN_WIDTH);
+  cmd_set_row_address(0, SCREEN_HEIGHT);
+
+  spi::write_command_byte(CMD.DISPLAY_INVERSION_ON);
+  delay(10);
+  spi::write_command_byte(CMD.PARTIAL_MODE_OFF);
+  delay(10);
+  spi::write_command_byte(CMD.DISPLAY_ON);
+  delay(255);
+}
+
+void tft::set_brightness(uint8_t brightness) {
+  analogWrite(PIN.BACKLIGHT, brightness);
+}
+
+void tft::hardware_reset() {
+  digitalWrite(PIN.RESET, LOW);
+  delay(50);
+  digitalWrite(PIN.RESET, HIGH);
+  delay(50);
+}
+
+void tft::fill_screen(rgb565_t colour) {
+  cmd_set_column_address(0, SCREEN_WIDTH);
+  cmd_set_row_address(0, SCREEN_HEIGHT);
+
+  spi::write_command_byte(CMD.MEMORY_WRITE);
+  // write pixel data
+  spi::set_mode(spi::Mode::DATA);
+  spi::chip_select(true);
+  const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
+  const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
+  for (uint16_t y = 0; y < SCREEN_HEIGHT; y++) {
+    for (uint16_t x = 0; x < SCREEN_WIDTH; x++) {
+      spi::write_byte(colour_high);
+      // remove a few cycles used by for loop branch checking
+      // made worse since we are using 16bit arithmetic which slows down 8bit processor
+      // i++ = 2 cycles for adiw
+      // i < total_pixels = 2 cycles for upper and lower byte sing cp and cpc
+      // branchlo = 1-2 cycles, 1 if branch taken, 2 if branch missed
+      spi::write_byte<5>(colour_low); 
+    }
+  }
+  spi::chip_select(false);
+}
