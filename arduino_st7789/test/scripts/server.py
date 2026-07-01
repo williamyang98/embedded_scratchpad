@@ -56,10 +56,13 @@ class App:
                     logger.info(f"Exiting early since websocket closed")
                     break
 
-                header_data = proc.stdout.read(4*9)
-                if len(header_data) != 36:
+
+                header_format = "=IHHHHHHHHI"
+                header_size = struct.calcsize(header_format)
+                header_data = proc.stdout.read(header_size)
+                if len(header_data) != header_size:
                     break
-                magic_number, x_start, x_end, y_start, y_end, write_index, image_width, image_height, label_length = struct.unpack("=IiiiiiiiI", header_data)
+                magic_number, x_start, x_end, y_start, y_end, x_cursor, y_cursor, image_width, image_height, label_length = struct.unpack(header_format, header_data)
                 MAGIC_NUMBER = 0xDEADBEEF
                 if magic_number != MAGIC_NUMBER:
                     logger.error(f"Got invalid header magic number {hex(magic_number)} instead of {hex(MAGIC_NUMBER)}")
@@ -90,7 +93,8 @@ class App:
                     "y_end": y_end,
                     "image_width": image_width,
                     "image_height": image_height,
-                    "write_index": write_index,
+                    "x_cursor": x_cursor,
+                    "y_cursor": y_cursor,
                     "label": label,
                 }
                 send_json(data)

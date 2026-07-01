@@ -144,7 +144,10 @@ void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
   spi::chip_select(false);
 }
 
-// endpoint is inclusive
+// Section 8.12 Address Control 
+// end point is inclusive
+// end point has to be less than or equal to starting point
+// address range is truncated to valid addresses meaning subsequent memory writes will be on the shrunken down rectangular address range and produce wrapping artifacts
 void tft::set_write_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uint16_t y_end) {
   cmd_set_column_address(x_start, x_end);
   cmd_set_row_address(y_start, y_end);

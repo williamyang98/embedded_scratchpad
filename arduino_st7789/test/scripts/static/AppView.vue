@@ -79,7 +79,8 @@ watch(selected_frame, (selected_frame) => {
     <tr><td>x_end</td><td>{{ selected_frame.header.x_end }}</td></tr>
     <tr><td>y_start</td><td>{{ selected_frame.header.y_start }}</td></tr>
     <tr><td>y_end</td><td>{{ selected_frame.header.y_end }}</td></tr>
-    <tr><td>write_index</td><td>{{ selected_frame.header.write_index }}</td></tr>
+    <tr><td>x_cursor</td><td>{{ selected_frame.header.x_cursor }}</td></tr>
+    <tr><td>y_cursor</td><td>{{ selected_frame.header.y_cursor }}</td></tr>
     <tr><td>image_width</td><td>{{ selected_frame.header.image_width }}</td></tr>
     <tr><td>image_height</td><td>{{ selected_frame.header.image_height }}</td></tr>
     <tr><td>label</td><td><div>{{ selected_frame.header.label || "?" }}</td></tr>

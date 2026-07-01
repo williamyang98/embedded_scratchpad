@@ -4,10 +4,10 @@
 #include <vector>
 #include <array>
 #include <memory>
-#include <cmath>
 #include <string>
 #include <optional>
 #include <format>
+#include <span>
 
 #if _WIN32
 #define NOMINMAX
@@ -15,36 +15,44 @@
 #include <fcntl.h>
 #endif
 
-typedef uint16_t RGB565 ;
+typedef uint16_t rgb565_t;
 
 class Image {
 private:
-    const int m_width;
-    const int m_height;
-    const int m_total_pixels;
-    std::vector<RGB565> m_data;
+    const uint16_t m_width;
+    const uint16_t m_height;
+    const uint32_t m_total_pixels;
+    std::vector<rgb565_t> m_data;
 public:
-    Image(int width, int height)
-    : m_width(width), m_height(height), m_total_pixels(width*height), m_data(width*height)
-    {}
+    Image(uint16_t width, uint16_t height)
+    :   m_width(width), m_height(height),
+        m_total_pixels(static_cast<uint32_t>(width)*static_cast<uint32_t>(height))
+    {
+        m_data.resize(m_total_pixels);
+    }
 
-    int width() const { return m_width; }
-    int height() const { return m_height; }
-    int total_pixels() const { return m_total_pixels; }
-    const RGB565* data() const { return m_data.data(); }
-    RGB565* data() { return m_data.data(); }
-    RGB565& operator[](size_t index) { return m_data[index]; }
-    const RGB565& operator[](size_t index) const { return m_data[index]; }
+    uint16_t width() const { return m_width; }
+    uint16_t height() const { return m_height; }
+    uint32_t total_pixels() const { return m_total_pixels; }
+    const std::span<const rgb565_t> data() const { return m_data; }
+    std::span<rgb565_t> data() { return m_data; }
+    rgb565_t& operator[](size_t index) { return m_data[index]; }
+    const rgb565_t& operator[](size_t index) const { return m_data[index]; }
 };
 
 struct Rect {
-    int x_start;
-    int x_end;
-    int y_start;
-    int y_end;
-    int width() const { return std::abs(x_end-x_start); }
-    int height() const { return std::abs(y_end-y_start); }
-    int size() const { return width()*height(); }
+    uint16_t x_start;
+    uint16_t x_end;
+    uint16_t y_start;
+    uint16_t y_end;
+    uint16_t width() const { return x_end-x_start+1; }
+    uint16_t height() const { return y_end-y_start+1; }
+    uint32_t size() const { return width()*height(); }
+};
+
+struct Cursor {
+    uint16_t x;
+    uint16_t y;
 };
 
 template <typename T>
@@ -54,15 +62,23 @@ T positive_mod(T x, T y) {
     return v;
 }
 
+template <typename T>
+size_t file_write_value(FILE* fp, T value) {
+    return fwrite(reinterpret_cast<const void*>(&value), sizeof(T), 1, fp);
+}
+
+template <typename T>
+size_t file_write_array(FILE* fp, std::span<const T> array) {
+    return fwrite(reinterpret_cast<const void*>(array.data()), sizeof(T), array.size(), fp);
+}
+
+
 class ST7789
 {
 private:
     std::shared_ptr<Image> m_image;
     Rect m_rect;
-    int m_rect_width;
-    int m_rect_height;
-    int m_rect_size;
-    int m_index;
+    Cursor m_cursor;
 public:
     ST7789(std::shared_ptr<Image> image)
     : m_image(image) {
@@ -72,57 +88,81 @@ public:
             .y_start = 0,
             .y_end = 0,
         };
-        m_index = 0;
+        m_cursor = {
+            .x = 0,
+            .y = 0,
+        };
     }
 
     Image& image() { return *m_image.get(); }
 
     void set_write_rect(Rect rect) {
-        // rect.x_start = positive_mod(rect.x_start, m_image->width());
-        // rect.x_end = positive_mod(rect.x_end, m_image->width());
-        // rect.y_start = positive_mod(rect.y_start, m_image->height());
-        // rect.y_end = positive_mod(rect.y_end, m_image->height());
+        if (rect.x_end >= m_image->width()) {
+            rect.x_end = m_image->width()-1;
+        }
+        if (rect.y_end >= m_image->height()) {
+            rect.y_end = m_image->height()-1;
+        }
+        if (rect.x_start > rect.x_end) {
+            rect.x_start = rect.x_end;
+        }
+        if (rect.y_start > rect.y_end) {
+            rect.y_start = rect.y_end;
+        }
         m_rect = rect;
-        m_rect_width = rect.width();
-        m_rect_height = rect.height();
-        m_rect_size = rect.size();
-        m_index = 0;
+        m_cursor = {
+            .x = rect.x_start,
+            .y = rect.y_start,
+        };
     }
 
-    void write(RGB565 pixel) {
-        if (m_rect_size == 0) return;
-        Image& image = *m_image.get();
-        const int x_rect = m_index % m_rect_width;
-        const int y_rect = (m_index / m_rect_width) % m_rect_height;
-        const int y_image = (m_rect.y_start + y_rect) % image.height();
-        const int offset = (y_image*image.width() + m_rect.x_start + x_rect) % image.total_pixels();
+    void write(rgb565_t pixel) {
+        auto& image = this->image();
+        const uint32_t offset =
+            static_cast<uint32_t>(m_cursor.y)*static_cast<uint32_t>(image.width()) +
+            static_cast<uint32_t>(m_cursor.x);
+        m_cursor.x += 1;
+        if (m_cursor.x > m_rect.x_end) {
+            m_cursor.x = m_rect.x_start;
+            m_cursor.y += 1;
+        }
+        if (m_cursor.y > m_rect.y_end) {
+            m_cursor.y = m_rect.y_start;
+        }
         image[offset] = pixel;
-        m_index = (m_index + 1) % m_rect_size;
     }
 
     void debug_out(FILE* fp, std::optional<std::string> label) {
-        constexpr int MAGIC_NUMBER = static_cast<int>(0xDEADBEEF);
-        const int HEADER[] = { MAGIC_NUMBER, m_rect.x_start, m_rect.x_end, m_rect.y_start, m_rect.y_end, m_index, m_image->width(), m_image->height() };
-        fwrite(reinterpret_cast<const void*>(HEADER), sizeof(int), sizeof(HEADER)/sizeof(int), fp);
+        constexpr uint32_t MAGIC_NUMBER = 0xDEADBEEF;
+        const std::array<const uint16_t, 8> HEADER = {
+            m_rect.x_start, m_rect.x_end, m_rect.y_start, m_rect.y_end,
+            m_cursor.x, m_cursor.y,
+            m_image->width(), m_image->height() };
+        file_write_value(fp, MAGIC_NUMBER);
+        file_write_array<const uint16_t>(fp, HEADER);
+
         if (label.has_value()) {
             const uint32_t length = static_cast<uint32_t>(label.value().size());
             if (length > 0) {
-                const char* data = label.value().data();
-                fwrite(reinterpret_cast<const void*>(&length), sizeof(uint32_t), 1, fp);
-                fwrite(reinterpret_cast<const void*>(data), sizeof(char), length, fp);
+                const auto data = std::span(
+                    reinterpret_cast<const char*>(label.value().data()),
+                    label.value().size()
+                );
+                file_write_value(fp, length);
+                file_write_array(fp, data);
             }
         } else {
             const uint32_t length = 0;
-            fwrite(reinterpret_cast<const void*>(&length), sizeof(uint32_t), 1, fp);
+            file_write_value(fp, length);
         }
 
-        fwrite(reinterpret_cast<const void*>(m_image->data()), sizeof(RGB565), m_image->total_pixels(), fp);
+        file_write_array(fp, std::span<const rgb565_t>(m_image->data()));
         fflush(fp);
     }
 };
 
 namespace gfx {
-    void fill_screen(ST7789& screen, RGB565 colour) {
+    void fill_screen(ST7789& screen, rgb565_t colour) {
         const auto image = screen.image();
         const Rect rect = {
             .x_start = 0,
@@ -147,8 +187,8 @@ int main(int argc, char** argv) {
     _setmode(_fileno(fp_out), _O_BINARY);
 #endif
 
-    const int SCREEN_WIDTH = 240;
-    const int SCREEN_HEIGHT = 280;
+    const uint16_t SCREEN_WIDTH = 240;
+    const uint16_t SCREEN_HEIGHT = 280;
 
     auto image = std::make_shared<Image>(SCREEN_WIDTH, SCREEN_HEIGHT);
     auto st7789_ptr = std::make_shared<ST7789>(image);
@@ -156,7 +196,7 @@ int main(int argc, char** argv) {
 
     gfx::fill_screen(st7789, 0xFFFF);
 
-    const std::array<RGB565, 8> TEST_COLOURS = {
+    const std::array<rgb565_t, 8> TEST_COLOURS = {
         0b00000'000000'00000,
         0b11111'000000'00000,
         0b00000'111111'00000,
@@ -168,14 +208,19 @@ int main(int argc, char** argv) {
     };
 
     st7789.debug_out(fp_out, "Initial frame");
-    for (int i = 0; i < 64; i++) {
-        const RGB565 colour = TEST_COLOURS[i % TEST_COLOURS.size()];
-        const int j = i;
+    for (uint16_t i = 0; i < 64; i++) {
+        const rgb565_t colour = TEST_COLOURS[i % TEST_COLOURS.size()];
+        const uint16_t margin = i;
 
-        const Rect rect = { .x_start = j, .x_end = SCREEN_WIDTH-j, .y_start = j, .y_end = SCREEN_HEIGHT-j };
-        const int rect_size = rect.size();
+        const Rect rect = {
+            .x_start = margin,
+            .x_end = uint16_t(SCREEN_WIDTH-margin-1),
+            .y_start = margin,
+            .y_end = uint16_t(SCREEN_HEIGHT-margin-1),
+        };
+        const uint32_t rect_size = rect.size();
         st7789.set_write_rect(rect);
-        for (int j = 0; j < rect_size; j++) {
+        for (uint32_t j = 0; j < rect_size; j++) {
             st7789.write(colour);
         }
         st7789.debug_out(fp_out, std::format("Frame {}", i));

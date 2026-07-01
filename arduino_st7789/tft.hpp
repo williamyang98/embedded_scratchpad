@@ -13,31 +13,38 @@ typedef uint16_t rgb565_t;
 // DOC: sitronix_st7789_datasheet.pdf
 // Section 8.8.3: 8-bit data bus for 16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors
 // r = 32, g = 64, b = 32, rgb = 32*64*32 = 65536
-static rgb565_t create_rgb565_colour(uint8_t r, uint8_t g, uint8_t b) {
-  uint16_t R = static_cast<uint16_t>(r & 0b00011111) << 11;
-  uint16_t G = static_cast<uint16_t>(g & 0b00111111) << 5;
-  uint16_t B = static_cast<uint16_t>(b & 0b00011111);
+static rgb565_t create_rgb565_bits(uint8_t r5, uint8_t g6, uint8_t b5) {
+  uint16_t R = static_cast<uint16_t>(r5);
+  uint16_t G = static_cast<uint16_t>(g6);
+  uint16_t B = static_cast<uint16_t>(b5);
+  R = (R & 0b011111) << 11;
+  G = (G & 0b111111) << 5;
+  B =  B & 0b011111;
   uint16_t RGB = R | G | B;
   return RGB;
 }
 
-constexpr rgb565_t bake_rgb565_colour_f32(float r, float g, float b) {
-  return 
-    (static_cast<uint16_t>(r*31.0f) << 11) |
-    (static_cast<uint16_t>(g*63.0f) << 5) |
-     static_cast<uint16_t>(b*31.0f);
+static rgb565_t create_rgb565_u8(uint8_t r, uint8_t g, uint8_t b) {
+  uint16_t R = static_cast<uint16_t>(r) * 31 / 255;
+  uint16_t G = static_cast<uint16_t>(g) * 31 / 255;
+  uint16_t B = static_cast<uint16_t>(b) * 31 / 255;
+  R = (R & 0b011111) << 11;
+  G = (G & 0b111111) << 5;
+  B =  B & 0b011111;
+  uint16_t RGB = R | G | B;
+  return RGB;
 }
 
-constexpr struct {
-  rgb565_t BLACK   = bake_rgb565_colour_f32(0,0,0);
-  rgb565_t RED     = bake_rgb565_colour_f32(1,0,0);
-  rgb565_t GREEN   = bake_rgb565_colour_f32(0,1,0);
-  rgb565_t BLUE    = bake_rgb565_colour_f32(0,0,1);
-  rgb565_t CYAN    = bake_rgb565_colour_f32(0,1,1);
-  rgb565_t MAGENTA = bake_rgb565_colour_f32(1,0,1);
-  rgb565_t YELLOW  = bake_rgb565_colour_f32(1,1,0);
-  rgb565_t WHITE   = bake_rgb565_colour_f32(1,1,1);
-} COLOUR;
+static rgb565_t create_rgb565_f32(float r, float g, float b) {
+  uint16_t R = static_cast<uint16_t>(r*31.0f);
+  uint16_t G = static_cast<uint16_t>(g*63.0f);
+  uint16_t B = static_cast<uint16_t>(b*31.0f);
+  R = (R & 0b011111) << 11;
+  G = (G & 0b111111) << 5;
+  B =  B & 0b011111;
+  uint16_t RGB = R | G | B;
+  return RGB;
+}
 
 void init();
 void set_brightness(uint8_t brightness);
