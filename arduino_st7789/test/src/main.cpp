@@ -17,6 +17,53 @@
 
 typedef uint16_t rgb565_t;
 
+// DOC: sitronix_st7789_datasheet.pdf
+// Section 8.8.3: 8-bit data bus for 16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors
+// r = 32, g = 64, b = 32, rgb = 32*64*32 = 65536
+static rgb565_t create_rgb565_bits(uint8_t r5, uint8_t g6, uint8_t b5) {
+    uint16_t R = static_cast<uint16_t>(r5);
+    uint16_t G = static_cast<uint16_t>(g6);
+    uint16_t B = static_cast<uint16_t>(b5);
+    R = (R & 0b011111) << 11;
+    G = (G & 0b111111) << 5;
+    B =  B & 0b011111;
+    uint16_t RGB = R | G | B;
+    return RGB;
+}
+
+static rgb565_t create_rgb565_u8(uint8_t r, uint8_t g, uint8_t b) {
+    uint16_t R = static_cast<uint16_t>(r) * 31 / 255;
+    uint16_t G = static_cast<uint16_t>(g) * 31 / 255;
+    uint16_t B = static_cast<uint16_t>(b) * 31 / 255;
+    R = (R & 0b011111) << 11;
+    G = (G & 0b111111) << 5;
+    B =  B & 0b011111;
+    uint16_t RGB = R | G | B;
+    return RGB;
+}
+
+static rgb565_t create_rgb565_f32(float r, float g, float b) {
+    uint16_t R = static_cast<uint16_t>(r*31.0f);
+    uint16_t G = static_cast<uint16_t>(g*63.0f);
+    uint16_t B = static_cast<uint16_t>(b*31.0f);
+    R = (R & 0b011111) << 11;
+    G = (G & 0b111111) << 5;
+    B =  B & 0b011111;
+    uint16_t RGB = R | G | B;
+    return RGB;
+}
+
+const struct {
+  rgb565_t BLACK   = create_rgb565_f32(0,0,0);
+  rgb565_t RED     = create_rgb565_f32(1,0,0);
+  rgb565_t GREEN   = create_rgb565_f32(0,1,0);
+  rgb565_t BLUE    = create_rgb565_f32(0,0,1);
+  rgb565_t CYAN    = create_rgb565_f32(0,1,1);
+  rgb565_t MAGENTA = create_rgb565_f32(1,0,1);
+  rgb565_t YELLOW  = create_rgb565_f32(1,1,0);
+  rgb565_t WHITE   = create_rgb565_f32(1,1,1);
+} COLOUR;
+
 class Image {
 private:
     const uint16_t m_width;
@@ -166,13 +213,21 @@ namespace gfx {
         const auto image = screen.image();
         const Rect rect = {
             .x_start = 0,
-            .x_end = image.width(),
+            .x_end = uint16_t(image.width()-1),
             .y_start = 0,
-            .y_end = image.height(),
+            .y_end = uint16_t(image.height()-1),
         };
-        const int total_pixels = image.total_pixels();
+        const uint32_t total_pixels = rect.size();
         screen.set_write_rect(rect);
-        for (int i = 0; i < total_pixels; i++) {
+        for (uint32_t i = 0; i < total_pixels; i++) {
+            screen.write(colour);
+        }
+    }
+
+    void fill_rect(ST7789& screen, Rect rect, rgb565_t colour) {
+        screen.set_write_rect(rect);
+        const uint32_t total_pixels = rect.size();
+        for (uint32_t i = 0; i < total_pixels; i++) {
             screen.write(colour);
         }
     }
@@ -191,39 +246,58 @@ int main(int argc, char** argv) {
     const uint16_t SCREEN_HEIGHT = 280;
 
     auto image = std::make_shared<Image>(SCREEN_WIDTH, SCREEN_HEIGHT);
-    auto st7789_ptr = std::make_shared<ST7789>(image);
-    auto st7789 = *st7789_ptr.get();
+    auto st7789 = std::make_shared<ST7789>(image);
+    auto screen = *st7789.get();
 
-    gfx::fill_screen(st7789, 0xFFFF);
+    gfx::fill_screen(screen, 0xFFFF);
 
     const std::array<rgb565_t, 8> TEST_COLOURS = {
-        0b00000'000000'00000,
-        0b11111'000000'00000,
-        0b00000'111111'00000,
-        0b00000'000000'11111,
-        0b11111'000000'11111,
-        0b00000'111111'11111,
-        0b11111'111111'00000,
-        0b11111'111111'11111,
+        COLOUR.BLACK,
+        COLOUR.RED,
+        COLOUR.GREEN,
+        COLOUR.BLUE,
+        COLOUR.CYAN,
+        COLOUR.MAGENTA,
+        COLOUR.YELLOW,
+        COLOUR.WHITE,
     };
 
-    st7789.debug_out(fp_out, "Initial frame");
+    screen.debug_out(fp_out, "Initial frame");
     for (uint16_t i = 0; i < 64; i++) {
         const rgb565_t colour = TEST_COLOURS[i % TEST_COLOURS.size()];
         const uint16_t margin = i;
-
         const Rect rect = {
             .x_start = margin,
             .x_end = uint16_t(SCREEN_WIDTH-margin-1),
             .y_start = margin,
             .y_end = uint16_t(SCREEN_HEIGHT-margin-1),
         };
-        const uint32_t rect_size = rect.size();
-        st7789.set_write_rect(rect);
-        for (uint32_t j = 0; j < rect_size; j++) {
-            st7789.write(colour);
+        gfx::fill_rect(screen, rect, colour);
+        screen.debug_out(fp_out, std::format("Frame {}", i));
+    }
+
+    {
+        gfx::fill_screen(screen, COLOUR.WHITE);
+        const uint16_t width = 128;
+        const uint16_t height = 128;
+        const uint16_t x_start = 32;
+        const uint16_t y_start = 32;
+        const uint16_t x_end = x_start+width-1;
+        const uint16_t y_end = y_start+height-1;
+        const Rect rect = {
+            .x_start = x_start,
+            .x_end = x_end,
+            .y_start = y_start,
+            .y_end = y_end,
+        };
+        screen.set_write_rect(rect);
+        for (uint16_t y = 0; y < height; y++) {
+            for (uint16_t x = 0; x < width; x++) {
+                const rgb565_t colour = create_rgb565_u8(x*2, 0, y*2);
+                screen.write(colour);
+            }
         }
-        st7789.debug_out(fp_out, std::format("Frame {}", i));
+        screen.debug_out(fp_out, "RGB square");
     }
 
     return 0;

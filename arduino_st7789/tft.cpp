@@ -189,12 +189,12 @@ void tft::init() {
   spi::write_command_byte(CMD.MEMORY_DATA_ACCESS_CONTROL);
   // D7=0: top to bottom
   // D6=0: left to right
-  // D5=0: normal mode
+  // D5=0: normal mode (portrait vs landscape mode)
   // D4=0: LCD refreshes from top to bottom
   // D3=0: RGB instead of BGR
   // D2=0: LCD refreshes from left to right
   // D1:D0=x: unused
-  spi::write_data_byte(0b00000000);
+  spi::write_data_byte(0b11000000);
 
   
   tft::set_write_rect(0, SCREEN_WIDTH-1, 0, SCREEN_HEIGHT-1);
