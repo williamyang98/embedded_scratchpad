@@ -87,19 +87,32 @@ void loop() {
   static bool is_text_black = true;
   static char digit = 0;
   static uint16_t x_start = 0;
+  static uint16_t y_start = 0;
+  static uint32_t millis_start = millis();
   if (digit == 0) {
+    const uint32_t millis_end = millis();
+    const uint32_t millis_elapsed = millis_end-millis_start;
+    Serial.println(millis_elapsed);
+
     is_text_black = !is_text_black;
     x_start = 0;
+    y_start = 32;
     delay(1000);
   }
   const tft::rgb565_t background_colour = is_text_black ? COLOUR.WHITE : COLOUR.BLACK;
   const tft::rgb565_t text_colour = is_text_black ? COLOUR.BLACK : COLOUR.WHITE;
   if (digit == 0) {
     tft::fill_screen(background_colour);
+    millis_start = millis();
   }
   const auto glyph = space_grotesk_medium::get_glyph(digit);
   if (glyph != nullptr) {
-    gfx::write_glyph(*glyph, x_start, 32, text_colour, background_colour);
+    if (x_start + glyph->width >= tft::SCREEN_WIDTH) {
+      x_start = 0;
+      y_start += glyph->height + glyph->height/2;
+    }
+
+    gfx::write_glyph(*glyph, x_start, y_start, text_colour, background_colour);
     x_start += glyph->width;
   }
   digit += 1;
