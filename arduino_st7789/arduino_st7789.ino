@@ -86,8 +86,11 @@ void loop() {
 #elif _TEST == 2
   static bool is_text_black = true;
   static char digit = 0;
+  static uint16_t x_start = 0;
   if (digit == 0) {
-    is_text_black = !is_text_black;  
+    is_text_black = !is_text_black;
+    x_start = 0;
+    delay(1000);
   }
   const tft::rgb565_t background_colour = is_text_black ? COLOUR.WHITE : COLOUR.BLACK;
   const tft::rgb565_t text_colour = is_text_black ? COLOUR.BLACK : COLOUR.WHITE;
@@ -96,8 +99,8 @@ void loop() {
   }
   const auto glyph = space_grotesk_medium::get_glyph(digit);
   if (glyph != nullptr) {
-    gfx::write_glyph(*glyph, 32, 32, text_colour, background_colour);
-    delay(1000);
+    gfx::write_glyph(*glyph, x_start, 32, text_colour, background_colour);
+    x_start += glyph->width;
   }
   digit += 1;
 #elif _TEST == 3

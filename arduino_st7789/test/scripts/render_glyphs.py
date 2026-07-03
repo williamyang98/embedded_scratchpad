@@ -56,6 +56,8 @@ def encode_to_grayscale_running_length_encoded_u4(image):
     image = image.astype(np.float32)
     image = image/U8_MAX_VALUE
     image = image*U4_MAX_VALUE
+    image = np.round(image)
+    image = np.clip(image, 0, U4_MAX_VALUE)
     image = image.astype(np.uint8)
 
     bits = BitPusher()
