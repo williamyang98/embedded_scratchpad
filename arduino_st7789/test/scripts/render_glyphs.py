@@ -2,52 +2,61 @@ from PIL import Image, ImageDraw, ImageFont
 import logging
 import os
 import numpy as np
+import argparse
 
 logger = logging.getLogger(__name__)
 
-# input image is u8 grayscale
-# output image is u4 grayscale
-def quantize_u8_to_u4(image):
+class BitPusher:
+    def __init__(self):
+        self._data = [0x00]
+        self.bit_index = 0
+
+    def push(self, data, n_bits):
+        self._data[-1] |= (data << self.bit_index) & 0xFF
+
+        remaining_bits = 8-self.bit_index
+        shift_bits = min(n_bits, remaining_bits)
+
+        self.bit_index += shift_bits
+        if self.bit_index == 8:
+            self.bit_index = 0
+            self._data.append(0x00)
+
+        data = data >> shift_bits
+        n_bits -= shift_bits
+        if n_bits > 0:
+            self.push(data, n_bits)
+
+    def get_data(self):
+        if self.bit_index == 0:
+            return self._data[:-1]
+        return self._data
+
+class Encoding:
+    BINARY_RLE_U8 = "binary_rle_u8"
+    GRAYSCALE_RLE_U4 = "grayscale_rle_u4"
+
+def encoding_to_enum(encoding):
+    if encoding == Encoding.BINARY_RLE_U8:
+        return "Encoding::BINARY_RLE_U8"
+    elif encoding == Encoding.GRAYSCALE_RLE_U4:
+        return "Encoding::GRAYSCALE_RLE_U4"
+    raise Exception(f"Unknown encoding provided: {encoding}")
+
+# encoding scheme
+# 1. quantize grayscale 0-255 to 0-3 inclusive
+# 2. store pixel value as 2 bits tightly packed, with successive bits packed into higher bits and bytes
+# 3. if pixel value is 0 or 3 store running value as 8 bit value also tightly packed
+# 4. if running value reaches 255, push the pixel value again and restart running value from 0
+def encode_to_grayscale_running_length_encoded_u4(image):
     assert image.dtype == np.uint8
+
     U8_MAX_VALUE = 255
     U4_MAX_VALUE = 3
     image = image.astype(np.float32)
     image = image/U8_MAX_VALUE
     image = image*U4_MAX_VALUE
-    image = np.round(image)
-    # image[image >= 2] = 3
     image = image.astype(np.uint8)
-    return image
-
-# image is u4 grayscale
-def get_running_length_encoding(image):
-    assert image.dtype == np.uint8
-
-    class BitPusher:
-        def __init__(self):
-            self._data = [0x00]
-            self.bit_index = 0
-
-        def push(self, data, n_bits):
-            self._data[-1] |= (data << self.bit_index) & 0xFF
-
-            remaining_bits = 8-self.bit_index
-            shift_bits = min(n_bits, remaining_bits)
-
-            self.bit_index += shift_bits
-            if self.bit_index == 8:
-                self.bit_index = 0
-                self._data.append(0x00)
-
-            data = data >> shift_bits
-            n_bits -= shift_bits
-            if n_bits > 0:
-                self.push(data, n_bits)
-
-        def get_data(self):
-            if self.bit_index == 0:
-                return self._data[:-1]
-            return self._data
 
     bits = BitPusher()
     running_length = None
@@ -79,13 +88,52 @@ def get_running_length_encoding(image):
     if running_length != None:
         bits.push(running_length, 8)
 
-    rle_data = np.array(bits.get_data(), dtype=np.uint8)
-    return rle_data
+    encoding = np.array(bits.get_data(), dtype=np.uint8)
+    return encoding
 
+def encode_to_binary_running_length_encoded_u8(image):
+    assert image.dtype == np.uint8
 
-def create_font_cpp_header(name, font, glyphs):
+    image = (image > 127).flatten()
+
+    running_length = None
+    running_value = None
+    encoding = []
+    for pixel in image:
+        if running_value == pixel:
+            running_length += 1
+            if running_length == 127:
+                pixel_bit = 0b10000000 if running_value else 0b00000000
+                encoding.append(pixel_bit | running_length)
+                running_length = None
+                running_value = None
+            continue
+
+        if running_length != None:
+            pixel_bit = 0b10000000 if running_value else 0b00000000
+            encoding.append(pixel_bit | running_length)
+            running_length = None
+            running_value = None
+
+        running_value = pixel
+        running_length = 1
+
+    if running_length != None:
+        pixel_bit = 0b10000000 if running_value else 0b00000000
+        encoding.append(pixel_bit | running_length)
+
+    encoding = np.array(encoding, dtype=np.uint8)
+    return encoding
+
+def create_font_cpp_header(namespace, font, glyphs, encoding):
     glyph_shapes = []
-    glyph_rles = []
+    glyph_encodings = []
+
+    encoder = None
+    if encoding == Encoding.BINARY_RLE_U8:
+        encoder = encode_to_binary_running_length_encoded_u8
+    elif encoding == Encoding.GRAYSCALE_RLE_U4:
+        encoder = encode_to_grayscale_running_length_encoded_u4
 
     for glyph in glyphs:
         bbox = font.getbbox(glyph)
@@ -102,20 +150,20 @@ def create_font_cpp_header(name, font, glyphs):
         drawer = ImageDraw.Draw(image)
         drawer.text((-bbox[0], -bbox[1]), glyph, font=font, fill=text_colour)
         logger.info(f"width={width}, height={height}, glyph={glyph}")
-        image_u8 = np.array(image)
-        image_u4 = quantize_u8_to_u4(image_u8)
-        image_rle = get_running_length_encoding(image_u4)
+        image = np.array(image)
+        encoded_image = encoder(image)
         glyph_shapes.append((width, height))
-        glyph_rles.append(image_rle)
+        glyph_encodings.append(encoded_image)
 
-    total_bytes = sum((len(rle) for rle in glyph_rles))
-    logger.info(f"font={name}, total_size={total_bytes} bytes, total_glyphs={len(glyphs)}")
+    total_bytes = sum((len(encoding) for encoding in glyph_encodings))
+    logger.info(f"font={namespace}, total_size={total_bytes} bytes, total_glyphs={len(glyphs)}")
 
+    encoding_string = f"glyph::{encoding_to_enum(encoding)}"
     declarations = []
-    for glyph, (width, height), rle in zip(glyphs, glyph_shapes, glyph_rles):
-        data_body = ','.join((f"0x{value:02X}" for value in rle))
-        data_declaration = f"static const uint8_t glyph_data_{glyph}[{len(rle)}] PROGMEM = {{{ data_body }}};"
-        glyph_declaration = f"static const Glyph glyph_{glyph} = {{ {width}, {height}, glyph_data_{glyph}, {len(rle)} }};";
+    for glyph, (width, height), encoding in zip(glyphs, glyph_shapes, glyph_encodings):
+        data_body = ','.join((f"0x{value:02X}" for value in encoding))
+        data_declaration = f"static const uint8_t glyph_data_{glyph}[{len(encoding)}] PROGMEM = {{{ data_body }}};"
+        glyph_declaration = f"static const glyph::Glyph glyph_{glyph} = {{ {width}, {height}, glyph_data_{glyph}, {len(encoding)}, {encoding_string} }};";
         declarations.append(data_declaration)
         declarations.append(glyph_declaration);
 
@@ -130,11 +178,11 @@ def create_font_cpp_header(name, font, glyphs):
 #define PROGMEM
 #endif
 
-namespace {name} {{
+namespace {namespace} {{
 
 {'\n'.join(declarations)}
 
-static const Glyph* get_glyph(char c) {{
+static const glyph::Glyph* get_glyph(char c) {{
     switch (c) {{
 {'\n'.join(('    ' + case for case in switch_statement_cases))}
     default: return nullptr;
@@ -146,21 +194,48 @@ static const Glyph* get_glyph(char c) {{
 
     return header
 
+def get_formatted_name(name):
+    new_name = []
+    name = name.replace("-", "_")
+    for c in name:
+        if c.isupper():
+            if len(new_name) > 0 and new_name[-1] != '_':
+                new_name.append('_')
+        new_name.append(c.lower())
+    new_name = ''.join(new_name)
+    return new_name
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("font", default="./fonts/SpaceGrotesk-Medium.ttf", nargs="?", help="Truefont filepath")
+    parser.add_argument("--output", default=None, help="Filepath for generated header file")
+    parser.add_argument("--namespace", default=None, help="Namespace used by generated header file")
+    parser.add_argument("--size", default=128, type=float, help="Font size")
+    parser.add_argument("--glyphs", default="0123456789CF", type=str, help="Glyphs to generate")
+    parser.add_argument("--encoding", default=Encoding.GRAYSCALE_RLE_U4, choices=[Encoding.BINARY_RLE_U8, Encoding.GRAYSCALE_RLE_U4], help="Encoding to use")
+    args = parser.parse_args()
+
     log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
     logging.basicConfig(level=log_level)
 
-    with open("../fonts/SpaceGrotesk-Medium.ttf", "rb") as fp:
-        font = ImageFont.truetype(fp, 64)
+    font_filename = os.path.basename(args.font)
+    font_basename = os.path.splitext(font_filename)[0]
+    formatted_namespace = get_formatted_name(font_basename)
+    output = args.output
+    if output == None:
+        output = os.path.join("./glyphs", f"{formatted_namespace}.hpp")
+    namespace = args.namespace
+    if namespace == None:
+        namespace = formatted_namespace
 
-    glyphs = "0123456789CF"
-    font_name = "space_grotesk_medium"
-    header = create_font_cpp_header(font_name, font, glyphs)
+    logger.info(f"Using namespace={namespace}, encoding={args.encoding}, size={args.size}")
 
-    glyph_dir = "./glyphs"
-    os.makedirs(glyph_dir, exist_ok=True)
-    glyph_path = os.path.join(glyph_dir, f"{font_name}.hpp")
-    with open(glyph_path, "w") as fp:
+    with open(args.font, "rb") as fp:
+        font = ImageFont.truetype(fp, args.size)
+
+    header = create_font_cpp_header(namespace, font, args.glyphs, args.encoding)
+    logger.info(f"Writing header to {output}")
+    with open(output, "w") as fp:
         fp.write(header)
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #include "./font.hpp"
 #include <stdint.h>
 #include <span>
-#include "../scripts/glyphs/space_grotesk_medium.hpp"
+#include "./bit_reader.hpp"
 
 namespace gfx {
 
@@ -24,46 +24,13 @@ static rgb565_t blend_rgb565_u4(rgb565_t colour_0, rgb565_t colour_1, uint8_t al
     return R | G | B;
 }
 
-class BitReader {
-private:
-    uint8_t curr_bit = 0;
-    uint16_t curr_byte = 0;
-    std::span<const uint8_t> data;
-    uint8_t data_byte = 0;
-public:
-    BitReader(std::span<const uint8_t> _data): data(_data) {}
-    uint8_t read_bits(uint8_t n_bits) {
-        if (curr_bit == 0) {
-            data_byte = data[curr_byte];
-        }
-
-        const uint8_t remaining_bits = 8-curr_bit;
-        const uint8_t shift_bits = n_bits > remaining_bits ? remaining_bits : n_bits;
-        const uint8_t mask = ~(0xFF << shift_bits);
-        uint8_t bits = data_byte & mask;
-
-        curr_bit += shift_bits;
-        data_byte = data_byte >> shift_bits;
-        if (curr_bit == 8) {
-            curr_bit = 0;
-            curr_byte += 1;
-        }
-
-        n_bits -= shift_bits;
-        if (n_bits > 0) {
-            const uint8_t bits_high = read_bits(n_bits);
-            bits |= bits_high << shift_bits;
-        }
-        return bits;
-    }
-};
-
-bool write_digit(ST7789& screen, char digit, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, rgb565_t background_colour) {
-    const auto glyph = space_grotesk_medium::get_glyph(digit);
-    if (glyph == nullptr) return false;
-
-    const uint16_t width = glyph->width;
-    const uint16_t height = glyph->height;
+static void write_glyph_grayscale_rle_u4(
+    ST7789& screen, const glyph::Glyph& glyph,
+    uint16_t x_start, uint16_t y_start,
+    rgb565_t text_colour, rgb565_t background_colour
+) {
+    const uint16_t width = glyph.width;
+    const uint16_t height = glyph.height;
 
     const Rect rect = {
         .x_start = x_start,
@@ -73,11 +40,10 @@ bool write_digit(ST7789& screen, char digit, uint16_t x_start, uint16_t y_start,
     };
 
     const uint16_t total_pixels = width*height;
-
     screen.set_write_rect(rect);
 
     uint16_t curr_pixel = 0;
-    auto bit_reader = BitReader(std::span(glyph->data, glyph->length));
+    auto bit_reader = BitReader(std::span(glyph.data, glyph.data_length));
 
     while (curr_pixel < total_pixels) {
         const uint8_t value = bit_reader.read_bits(2);
@@ -93,9 +59,44 @@ bool write_digit(ST7789& screen, char digit, uint16_t x_start, uint16_t y_start,
             screen.write(colour);
         }
     }
+}
 
+static void write_glyph_binary_rle_u8(
+    ST7789& screen, const glyph::Glyph& glyph,
+    uint16_t x_start, uint16_t y_start,
+    rgb565_t text_colour, rgb565_t background_colour
+) {
+    const uint16_t width = glyph.width;
+    const uint16_t height = glyph.height;
+    const Rect rect = {
+        .x_start = x_start,
+        .x_end = static_cast<uint16_t>(x_start+width-1),
+        .y_start = y_start,
+        .y_end = static_cast<uint16_t>(y_start+height-1),
+    };
+    screen.set_write_rect(rect);
+    const uint8_t mask = 0b10000000;
+;   for (uint16_t i = 0; i < glyph.data_length; i++) {
+        const uint8_t rle = glyph.data[i];
+        const uint8_t value = rle & mask;
+        const uint8_t length = rle & ~mask;
+        const rgb565_t colour = value == 0 ? background_colour : text_colour;
+        for (uint8_t j = 0; j != length; j++) {
+            screen.write(colour);
+        }
+    }
+}
 
-    return true;
+void write_glyph(
+    ST7789& screen, const glyph::Glyph& glyph,
+    uint16_t x_start, uint16_t y_start,
+    rgb565_t text_colour, rgb565_t background_colour
+) {
+    switch (glyph.encoding) {
+    case glyph::Encoding::BINARY_RLE_U8: return write_glyph_binary_rle_u8(screen, glyph, x_start, y_start, text_colour, background_colour);
+    case glyph::Encoding::GRAYSCALE_RLE_U4: return write_glyph_grayscale_rle_u4(screen, glyph, x_start, y_start, text_colour, background_colour);
+    default: break;
+    }
 }
 
 };

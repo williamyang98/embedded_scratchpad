@@ -96,7 +96,8 @@ void loop() {
   }
   const auto glyph = space_grotesk_medium::get_glyph(digit);
   if (glyph != nullptr) {
-    gfx::write_digit(*glyph, 32, 32, text_colour, background_colour);
+    gfx::write_glyph(*glyph, 32, 32, text_colour, background_colour);
+    delay(1000);
   }
   digit += 1;
 #elif _TEST == 3

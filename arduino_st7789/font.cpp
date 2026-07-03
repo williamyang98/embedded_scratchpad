@@ -1,10 +1,11 @@
-#include "./font.hpp"
 #include <stdint.h>
-#include "./tft.hpp"
 #include <avr/pgmspace.h>
-#include "./test/scripts/glyphs/glyph.hpp"
+#include "./font.hpp"
+#include "./tft.hpp"
+#include "./bit_reader.hpp"
 
 using namespace tft;
+using namespace glyph;
 
 rgb565_t blend_rgb565_u4(rgb565_t colour_0, rgb565_t colour_1, uint8_t alpha) {
   const uint8_t r_0 = (colour_0 & 0b1111100000000000) >> 11;
@@ -25,44 +26,7 @@ rgb565_t blend_rgb565_u4(rgb565_t colour_0, rgb565_t colour_1, uint8_t alpha) {
   return R | G | B;
 }
 
-class BitReader {
-private:
-  uint8_t curr_bit = 0;
-  uint16_t curr_byte = 0;
-  uint8_t data_byte = 0;
-  const uint8_t* data;
-public:
-  BitReader(const uint8_t* _data): data(_data) {}
-
-  uint8_t read_bits(uint8_t n_bits) {
-    if (curr_bit == 0) {
-      data_byte = pgm_read_byte(data + curr_byte);
-    }
-
-    const uint8_t remaining_bits = 8-curr_bit;
-    const uint8_t shift_bits = n_bits > remaining_bits ? remaining_bits : n_bits;
-    const uint8_t mask = ~(0xFF << shift_bits);
-    uint8_t bits = data_byte & mask;
-
-    curr_bit += shift_bits;
-    data_byte = data_byte >> shift_bits;
-    if (curr_bit == 8) {
-      curr_bit = 0;
-      curr_byte += 1;
-    }
-
-    n_bits -= shift_bits;
-    if (n_bits > 0) {
-      const uint8_t bits_high = read_bits(n_bits);
-      bits |= bits_high << shift_bits;
-    }
-    return bits;
-  }
-};
-
-namespace gfx {
-
-void write_digit(const Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, rgb565_t background_colour) {
+void write_glyph_grayscale_rle_u4(const Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, rgb565_t background_colour) {
   const uint16_t width = glyph.width;
   const uint16_t height = glyph.height;
   const uint16_t x_end = static_cast<uint16_t>(x_start+width-1);
@@ -91,6 +55,46 @@ void write_digit(const Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_
   tft::end_write_pixel();
 
   return true;
+}
+
+void write_glyph_binary_rle_u8(const Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, rgb565_t background_colour) {
+  const uint16_t width = glyph.width;
+  const uint16_t height = glyph.height;
+  const uint16_t x_end = static_cast<uint16_t>(x_start+width-1);
+  const uint16_t y_end = static_cast<uint16_t>(y_start+height-1);
+  tft::set_write_rect(x_start, x_end, y_start, y_end);
+
+  uint16_t curr_data = 0;
+  const uint16_t total_data = glyph.data_length;
+
+  tft::begin_write_pixel();
+  constexpr uint8_t mask = 0b10000000;
+  for (uint16_t curr_data = 0; curr_data < total_data; curr_data++) {
+    const uint8_t data = pgm_read_byte(glyph.data + curr_data);
+    const uint8_t pixel = data & mask;
+    const uint8_t length = data & ~mask;
+    const rgb565_t colour = pixel == 0 ? background_colour : text_colour;
+    for (uint8_t i = 0; i < length; i++) {
+      tft::write_pixel(colour);
+    }
+  }
+  tft::end_write_pixel();
+
+  return true;
+}
+
+namespace gfx {
+
+void write_glyph(
+  const glyph::Glyph& glyph,
+  uint16_t x_start, uint16_t y_start,
+  rgb565_t text_colour, rgb565_t background_colour
+) {
+  switch (glyph.encoding) {
+  case glyph::Encoding::BINARY_RLE_U8: return write_glyph_binary_rle_u8(glyph, x_start, y_start, text_colour, background_colour);
+  case glyph::Encoding::GRAYSCALE_RLE_U4: return write_glyph_grayscale_rle_u4(glyph, x_start, y_start, text_colour, background_colour);
+  default: break;
+  }
 }
 
 };
