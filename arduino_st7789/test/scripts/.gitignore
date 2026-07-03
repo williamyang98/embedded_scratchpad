@@ -1,2 +1,3 @@
 venv/
-glyphs/
+glyphs/*
+!glyphs/glyph.hpp

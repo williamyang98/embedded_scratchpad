@@ -1,4 +1,7 @@
-#include "tft.hpp"
+#include "./tft.hpp"
+#include "./font.hpp"
+#include <avr/pgmspace.h>
+#include "./test/scripts/glyphs/space_grotesk_medium.hpp"
 
 void setup(void) {
   Serial.begin(9600);
@@ -31,7 +34,8 @@ static tft::rgb565_t TEST_COLOURS[TOTAL_TEST_COLOURS] = {
 };
 
 void loop() {
-#if 0
+#define _TEST 2
+#if _TEST == 0
   int loop_size = 1;
   uint32_t millis_start = millis();
 
@@ -44,7 +48,7 @@ void loop() {
   uint32_t millis_end = millis();
   uint32_t millis_elapsed = millis_end-millis_start;
   Serial.println(millis_elapsed);
-#elif 0
+#elif _TEST == 1
   static int i = 0;
   i += 1;
   const tft::rgb565_t background_colour = i % 2 == 0 ? COLOUR.BLACK : COLOUR.WHITE;
@@ -79,8 +83,24 @@ void loop() {
     tft::end_write_pixel();
   }
   delay(1000);
-#else
-    static int i = 0;
+#elif _TEST == 2
+  static bool is_text_black = true;
+  static char digit = 0;
+  if (digit == 0) {
+    is_text_black = !is_text_black;  
+  }
+  const tft::rgb565_t background_colour = is_text_black ? COLOUR.WHITE : COLOUR.BLACK;
+  const tft::rgb565_t text_colour = is_text_black ? COLOUR.BLACK : COLOUR.WHITE;
+  if (digit == 0) {
+    tft::fill_screen(background_colour);
+  }
+  const auto glyph = space_grotesk_medium::get_glyph(digit);
+  if (glyph != nullptr) {
+    gfx::write_digit(*glyph, 32, 32, text_colour, background_colour);
+  }
+  digit += 1;
+#elif _TEST == 3
+  static int i = 0;
   i += 1;
   const tft::rgb565_t background_colour = i % 2 == 0 ? COLOUR.BLACK : COLOUR.WHITE;
   tft::fill_screen(background_colour);
