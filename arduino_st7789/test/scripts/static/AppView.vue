@@ -8,6 +8,7 @@ const selected_frame_index = ref(0);
 const selected_frame = computed(() => frames.value[selected_frame_index.value]);
 const is_running = ref(false);
 const is_pin_frame = ref(false);
+const frame_scale = ref(1.0);
 
 function launch_process() {
   is_running.value = true;
@@ -87,8 +88,12 @@ watch(selected_frame, (selected_frame) => {
   </table>
   <div v-else>Missing header data</div>
 </div>
+<div>
+    <label>Scale: {{ frame_scale.toFixed(1) }}</label>
+    <input type="range" v-model.number="frame_scale" min="0" max="4" step="0.1"/>
+</div>
 <div class="frame" :class="{ 'hidden': selected_frame === undefined }">
-  <FrameView ref="frame"/>
+  <FrameView ref="frame" :scale="frame_scale"/>
 </div>
 </template>
 

@@ -1,9 +1,14 @@
 <script setup>
-import { ref, useTemplateRef, watch, defineExpose } from "vue";
+import { ref, useTemplateRef, computed, watch, defineExpose } from "vue";
 
+const props = defineProps(["scale"]);
 const canvas = useTemplateRef("canvas");
 const canvas_context = ref(null);
 const image_data = ref(null);
+const scale = computed(() => {
+    if (props.scale === undefined) return 1.0;
+    return props.scale;
+});
 
 watch(canvas, (canvas) => {
   if(canvas === null) return;
@@ -19,12 +24,11 @@ function update_image(rgb565_data, width, height) {
   if (canvas.value === null) return;
   if (canvas_context.value === null) return;
 
-  const scale = 2;
   if (image_data.value === null || canvas.value.width !== width || canvas.value.height !== height) {
     canvas.value.width = width;
     canvas.value.height = height;
-    canvas.value.style.width = `${Math.round(width*scale)}px`;
-    canvas.value.style.height = `${Math.round(height*scale)}px`;
+    canvas.value.style.width = `${Math.round(width*scale.value)}px`;
+    canvas.value.style.height = `${Math.round(height*scale.value)}px`;
     image_data.value = canvas_context.value.createImageData(width, height);
   }
 
@@ -45,6 +49,14 @@ function update_image(rgb565_data, width, height) {
   }
   canvas_context.value.putImageData(image_data.value, 0, 0);
 }
+
+watch(scale, (scale) => {
+  if (canvas.value === null) return;
+  const width = Math.round(canvas.value.width*scale);
+  const height = Math.round(canvas.value.height*scale);
+  canvas.value.style.width = `${width}px`;
+  canvas.value.style.height = `${height}px`;
+});
 
 defineExpose({
   update_image,
