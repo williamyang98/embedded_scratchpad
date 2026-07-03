@@ -6,6 +6,7 @@
 #include <format>
 #include "./st7789.hpp"
 #include "./gfx.hpp"
+#include "./font.hpp"
 
 #if _WIN32
 #define NOMINMAX
@@ -79,6 +80,17 @@ int main(int argc, char** argv) {
             }
         }
         screen.debug_out(fp_out, "RGB square");
+    }
+
+    {
+        const std::string glyphs = "0123456789CF";
+        for (const char glyph: glyphs) {
+            const auto background_colour = COLOUR.BLUE;
+            const auto font_color = COLOUR.WHITE;
+            gfx::fill_screen(screen, background_colour);
+            gfx::write_digit(screen, glyph, 32, 32, font_color, background_colour);
+            screen.debug_out(fp_out, std::format("Glyph {0}", glyph));
+        }
     }
 
     return 0;
