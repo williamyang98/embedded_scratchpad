@@ -1,18 +1,23 @@
 #pragma once
 #include <stdint.h>
-#include <span>
+
+#ifdef TEST_HARNESS
+#define pgm_read_byte(x) *(x)
+#else
+#include <avr/pgmspace.h>
+#endif
 
 class BitReader {
 private:
     uint8_t curr_bit = 0;
     uint16_t curr_byte = 0;
-    std::span<const uint8_t> data;
     uint8_t data_byte = 0;
+    const uint8_t* data;
 public:
-    BitReader(std::span<const uint8_t> _data): data(_data) {}
+    BitReader(const uint8_t* _data): data(_data) {}
     uint8_t read_bits(uint8_t n_bits) {
         if (curr_bit == 0) {
-            data_byte = data[curr_byte];
+            data_byte = pgm_read_byte(data + curr_byte);
         }
 
         const uint8_t remaining_bits = 8-curr_bit;
@@ -35,4 +40,3 @@ public:
         return bits;
     }
 };
-

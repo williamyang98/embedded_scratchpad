@@ -1,7 +1,16 @@
-#include "tft.hpp"
-#include "utility.hpp"
+#include "./test/src/tft.hpp"
 #include <avr/io.h>
 #include <Arduino.h>
+
+template <int N>
+inline static void nop() {
+  static_assert(N > 0);
+  asm volatile("nop\n");
+  nop<N-1>();
+}
+
+template <>
+inline void nop<0>() {}
 
 // Section 9.1: System function command table 1
 constexpr struct {
