@@ -84,16 +84,33 @@ int main(int argc, char** argv) {
     }
 
     {
-        const std::string glyphs = "0123456789CF";
-        for (const char glyph: glyphs) {
-            const auto background_colour = COLOUR.BLUE;
-            const auto font_color = COLOUR.WHITE;
-            const auto glyph_entry = space_grotesk_medium::get_glyph(glyph);
-            if (glyph_entry == nullptr) continue;
-            gfx::fill_screen(screen, background_colour);
-            gfx::write_glyph(screen, *glyph_entry, 32, 32, font_color, background_colour);
-            screen.debug_out(fp_out, std::format("Glyph {0}", glyph));
+        const auto background_colour = COLOUR.BLACK;
+        const auto font_color = COLOUR.WHITE;
+        gfx::fill_screen(screen, background_colour);
+
+        uint16_t x_start = 0;
+        uint16_t y_start = 0;
+        uint16_t x_margin = 0;
+        uint16_t y_margin = 2;
+        uint16_t total_glyphs = 0;
+        for (uint8_t c = 0; c < 255; c++) {
+            const auto glyph = space_grotesk_medium::get_glyph(c);
+            if (glyph == nullptr) continue;
+            const uint16_t x_end = x_start + glyph->width + x_margin;
+            if (x_end >= SCREEN_WIDTH) {
+                x_start = 0;
+                y_start = y_start + glyph->height + y_margin;
+            }
+            const uint16_t y_end = y_start + glyph->height + y_margin;
+
+            if (y_end >= SCREEN_HEIGHT) {
+                y_start = 0;
+            }
+            gfx::write_glyph(screen, *glyph, x_start, y_start, font_color, background_colour);
+            x_start += glyph->width + x_margin;
+            total_glyphs += 1;
         }
+        screen.debug_out(fp_out, std::format("Font with {0} glyphs", total_glyphs));
     }
 
     return 0;

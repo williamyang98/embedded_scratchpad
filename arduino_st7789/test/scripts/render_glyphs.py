@@ -235,7 +235,18 @@ def main():
     with open(args.font, "rb") as fp:
         font = ImageFont.truetype(fp, args.size)
 
-    header = create_font_cpp_header(namespace, font, args.glyphs, args.encoding)
+    glyphs = {}
+    for glyph in args.glyphs:
+        count = glyphs.get(glyph, 0)
+        count += 1
+        glyphs[glyph] = count
+    for key, value in glyphs.items():
+        if value == 1: continue
+        logger.warn(f"Duplicate glyph '{key}' ignored with {value} instances")
+    glyphs = sorted(glyphs.keys())
+    logger.info(f"Generating {len(glyphs)} glyphs")
+
+    header = create_font_cpp_header(namespace, font, glyphs, args.encoding)
     logger.info(f"Writing header to {output}")
     with open(output, "w") as fp:
         fp.write(header)
