@@ -22,6 +22,7 @@ void ST7789::debug_out(FILE* fp, std::optional<std::string> label) {
 
     file_write_value(fp, MAGIC_NUMBER);
     file_write_array<const uint16_t>(fp, HEADER);
+    file_write_value(fp, m_time_nanos);
     file_write_value(fp, m_brightness);
     file_write_value(fp, m_is_hardware_reset);
     m_is_hardware_reset = 0;

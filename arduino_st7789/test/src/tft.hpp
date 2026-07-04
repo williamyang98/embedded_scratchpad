@@ -20,14 +20,3 @@ void write_pixel(rgb565_t colour);
 void end_write_pixel();
 
 };
-
-#ifdef TEST_HARNESS
-#include "./st7789.hpp"
-#include <memory>
-
-namespace tft {
-    extern std::unique_ptr<ST7789> st7789;
-};
-#endif
-
-

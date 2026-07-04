@@ -3,8 +3,8 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <memory>
 #include "./rgb565.hpp"
-
 
 class ST7789
 {
@@ -30,6 +30,7 @@ private:
     const uint16_t m_height;
     uint8_t m_brightness;
     uint8_t m_is_hardware_reset;
+    uint64_t m_time_nanos;
     Mode m_mode;
     std::vector<rgb565_t> m_buffer;
     Rect m_rect;
@@ -42,6 +43,7 @@ public:
         m_brightness = 0;
         m_is_hardware_reset = 0;
         m_mode = Mode::COMMAND;
+        m_time_nanos = 0;
         m_rect = {
             .x_start = 0,
             .x_end = 0,
@@ -91,7 +93,19 @@ public:
         m_mode = Mode::COMMAND;
     }
 
+    void sleep_nanos(uint64_t time_nanos) {
+        m_time_nanos += time_nanos;
+    }
+
+    uint64_t get_time_nanos() const {
+        return m_time_nanos;
+    }
+
     void write(rgb565_t pixel) {
+        // at f_spi = 8Mhz we have a clock period of 125ns
+        // for 16bits this is 2us
+        sleep_nanos(2000);
+
         if (m_mode != Mode::DATA) return;
 
         const uint32_t offset =
@@ -110,3 +124,5 @@ public:
 
     void debug_out(FILE* fp, std::optional<std::string> label);
 };
+
+extern std::unique_ptr<ST7789> st7789;

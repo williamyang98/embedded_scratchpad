@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "./app.hpp"
+#include "./st7789.hpp"
 
 #if _WIN32
 #define NOMINMAX
@@ -10,6 +11,7 @@
 
 FILE* fp_in; // extern
 FILE* fp_out; // extern
+std::unique_ptr<ST7789> st7789 = nullptr; // extern
 
 int main(int argc, char** argv) {
     fp_in = stdin;

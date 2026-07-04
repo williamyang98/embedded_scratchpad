@@ -84,6 +84,9 @@ watch(selected_frame, (selected_frame) => {
     <tr><td>y_cursor</td><td>{{ selected_frame.header.y_cursor }}</td></tr>
     <tr><td>image_width</td><td>{{ selected_frame.header.image_width }}</td></tr>
     <tr><td>image_height</td><td>{{ selected_frame.header.image_height }}</td></tr>
+    <tr><td>time_nanos</td><td>{{ selected_frame.header.time_nanos }}</td></tr>
+    <tr><td>brightness</td><td>{{ selected_frame.header.brightness }}</td></tr>
+    <tr><td>hardware_reset</td><td>{{ selected_frame.header.hardware_reset }}</td></tr>
     <tr><td>label</td><td><div>{{ selected_frame.header.label || "?" }}</td></tr>
   </table>
   <div v-else>Missing header data</div>

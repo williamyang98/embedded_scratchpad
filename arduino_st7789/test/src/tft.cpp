@@ -1,9 +1,7 @@
 #include "./tft.hpp"
-
+#include "./st7789.hpp"
 
 namespace tft {
-
-std::unique_ptr<ST7789> st7789 = nullptr;
 
 void init() {
     st7789 = std::make_unique<ST7789>(SCREEN_WIDTH, SCREEN_HEIGHT);
