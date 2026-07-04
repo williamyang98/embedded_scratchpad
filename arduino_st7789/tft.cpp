@@ -237,13 +237,20 @@ void tft::end_write_pixel() {
   spi::chip_select(false);
 }
 
-void tft::fill_screen(rgb565_t colour) {
-  tft::set_write_rect(0, SCREEN_WIDTH-1, 0, SCREEN_HEIGHT-1);
+void tft::write_pixel(rgb565_t colour) {
+  const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
+  const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
+  spi::write_byte(colour_high);
+  spi::write_byte(colour_low); 
+}
+
+void tft::fill_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uint16_t y_end, rgb565_t colour) {
+  tft::set_write_rect(x_start, x_end, y_start, y_end);
   tft::begin_write_pixel();
   const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
   const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
-  for (uint16_t y = 0; y < SCREEN_HEIGHT; y++) {
-    for (uint16_t x = 0; x < SCREEN_WIDTH; x++) {
+  for (uint16_t y = y_start; y <= y_end; y++) {
+    for (uint16_t x = x_start; x <= x_end; x++) {
       spi::write_byte(colour_high);
       spi::write_byte(colour_low);
     }
@@ -251,9 +258,6 @@ void tft::fill_screen(rgb565_t colour) {
   tft::end_write_pixel();
 }
 
-void tft::write_pixel(rgb565_t colour) {
-  const uint8_t colour_high = static_cast<uint8_t>(colour >> 8);
-  const uint8_t colour_low = static_cast<uint8_t>(colour & 0x00FF);
-  spi::write_byte(colour_high);
-  spi::write_byte(colour_low); 
+void tft::fill_screen(rgb565_t colour) {
+  fill_rect(0, SCREEN_WIDTH-1, 0, SCREEN_HEIGHT-1, colour);
 }

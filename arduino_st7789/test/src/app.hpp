@@ -30,11 +30,28 @@ static void test_screen_colours() {
     const uint32_t millis_start = millis();
     for (int i = 0; i < TOTAL_TEST_COLOURS; i++) {
         tft::fill_screen(TEST_COLOURS[i]);
-        log_frame(std::format("Testing color {0}", i));
+        log_frame(std::format("Testing full screen color {0}", i));
     }
     const uint32_t millis_end = millis();
     const uint32_t millis_elapsed = millis_end-millis_start;
     Serial.println(millis_elapsed);
+}
+
+static void test_tunnel_colours() {
+    uint16_t x_start = 0;
+    uint16_t x_end = tft::SCREEN_WIDTH-1;
+    uint16_t y_start = 0;
+    uint16_t y_end = tft::SCREEN_HEIGHT-1;
+    const uint16_t step = 4;
+    for (uint8_t i = 0; i < 32; i++) {
+        const rgb565_t colour = TEST_COLOURS[i % TOTAL_TEST_COLOURS];
+        tft::fill_rect(x_start, x_end, y_start, y_end, colour);
+        log_frame(std::format("Testing tunnel colour {0}", i));
+        x_start += step;
+        y_start += step;
+        x_end -= step;
+        y_end -= step;
+    }
 }
 
 static void test_circle() {
@@ -189,6 +206,7 @@ static void app_setup() {
 
 static void app_loop() {
     test_screen_colours();
+    test_tunnel_colours();
     test_circle();
     test_rgb_square();
     test_glyphs_with_solid_background();
