@@ -69,6 +69,7 @@ static void test_circle() {
     }
     tft::end_write_pixel();
     log_frame("Test circle");
+    delay(1000);
 }
 
 static void test_rgb_square() {
@@ -92,6 +93,7 @@ static void test_rgb_square() {
         tft::end_write_pixel();
     }
     log_frame("Testing rgb square");
+    delay(1000);
 }
 
 static void test_glyphs_with_solid_background() {
@@ -121,6 +123,7 @@ static void test_glyphs_with_solid_background() {
         total_glyphs += 1;
     }
     log_frame(std::format("Font with {0} glyphs on solid background", total_glyphs));
+    delay(1000);
 }
 
 
@@ -185,6 +188,9 @@ static void app_setup() {
 }
 
 static void app_loop() {
+    test_screen_colours();
+    test_circle();
+    test_rgb_square();
     test_glyphs_with_solid_background();
     test_glyphs_with_radial_background();
 }
