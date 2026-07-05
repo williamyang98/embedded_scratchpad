@@ -4,7 +4,9 @@
 #include "./font.hpp"
 #include "./rgb565.hpp"
 #include "./colour_functions.hpp"
-#include "../scripts/glyphs/space_grotesk_medium.hpp"
+#include "../scripts/glyphs/large_font.hpp"
+#include "../scripts/glyphs/small_font.hpp"
+#include <string.h>
 
 #ifdef TEST_HARNESS
 #include <format>
@@ -124,7 +126,7 @@ static void test_glyphs_with_solid_background() {
     uint16_t y_margin = 2;
     uint16_t total_glyphs = 0;
     for (uint8_t c = 0; c < 255; c++) {
-        const auto glyph = space_grotesk_medium::get_glyph(c);
+        const auto glyph = large_font::get_glyph(c);
         if (glyph == nullptr) continue;
         const uint16_t x_end = x_start + glyph->width + x_margin;
         if (x_end >= tft::SCREEN_WIDTH) {
@@ -172,7 +174,7 @@ static void test_glyphs_with_radial_background() {
         const rgb565_t text_colour = COLOUR.WHITE;
         uint8_t total_glyphs = 0;
         for (uint8_t c = 0; c < 255; c++) {
-            const auto glyph = space_grotesk_medium::get_glyph(c);
+            const auto glyph = large_font::get_glyph(c);
             if (glyph == nullptr) continue;
             total_glyphs += 1;
             const uint16_t x_end = x_start + glyph->width + x_margin - 1;
@@ -243,44 +245,105 @@ static void test_weather_page(int16_t temperature, uint16_t humidity) {
     radial.y_end = tft::SCREEN_HEIGHT-1;
     radial.fill();
 
-    RightToLeftPrinter printer;
-    const uint16_t x_margin = 20;
-    const uint16_t y_margin = 20;
+    const uint16_t x_margin = 10;
+    const uint16_t y_margin = 10;
+    uint16_t y_text_bottom = 0;
 
     const rgb565_t text_colour = COLOUR.WHITE;
-    const auto glyph_library = space_grotesk_medium::get_glyph;
     {
+        namespace font = large_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        RightToLeftPrinter printer;
         printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
-        printer.y_end = y_margin+space_grotesk_medium::MAX_HEIGHT-1;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
         const auto decimal = DecimalValue(temperature);
-        printer.print('C', text_colour, radial, glyph_library);
-        printer.print(0xB0, text_colour, radial, glyph_library);
-        printer.print('0'+decimal.digit_decimal, text_colour, radial, glyph_library);
-        printer.print('.', text_colour, radial, glyph_library);
-        printer.print('0'+decimal.digit_0, text_colour, radial, glyph_library);
-        if (decimal.absolute_value >= 100) {
-            printer.print('0'+decimal.digit_1, text_colour, radial, glyph_library);
-        }
-        if (decimal.is_minus) {
-            printer.print('-', text_colour, radial, glyph_library);
+        printer.print_char('C', radial, &font::get_glyph);
+        printer.print_char(0xB0, radial, &font::get_glyph);
+        printer.print_char('0'+decimal.digit_decimal, radial, &font::get_glyph);
+        printer.print_char('.', radial, &font::get_glyph);
+        printer.print_char('0'+decimal.digit_0, radial, &font::get_glyph);
+        if (decimal.absolute_value >= 100) printer.print_char('0'+decimal.digit_1, radial, &font::get_glyph);
+        if (decimal.is_minus) printer.print_char('-', radial, &font::get_glyph);
+    }
+    {
+        namespace font = large_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        RightToLeftPrinter printer;
+        printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
+        const auto decimal = DecimalValue(humidity);
+        printer.print_char('%', radial, &font::get_glyph);
+        printer.print_char('0'+decimal.digit_decimal, radial, &font::get_glyph);
+        printer.print_char('.', radial, &font::get_glyph);
+        printer.print_char('0'+decimal.digit_0, radial, &font::get_glyph);
+        if (decimal.absolute_value >= 100) printer.print_char('0'+decimal.digit_1, radial, &font::get_glyph);
+        if (decimal.absolute_value >= 1000) printer.print_char('0'+decimal.digit_2, radial, &font::get_glyph);
+    }
+    {
+        namespace font = large_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        RightToLeftPrinter printer;
+        printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
+        printer.print_string("02:27AM", radial, &font::get_glyph);
+    }
+    {
+        namespace font = small_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        RightToLeftPrinter printer;
+        printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
+        if (temperature < 0) {
+            printer.print_string("HEAVY SNOWSTORM", radial, &font::get_glyph);
+        } else if (temperature < 200) {
+            printer.print_string("STRONG OVERCAST", radial, &font::get_glyph);
+        } else if (temperature < 300) {
+            printer.print_string("SUNNY", radial, &font::get_glyph);
+        } else {
+            printer.print_string("INTENSE HEATWAVE", radial, &font::get_glyph);
         }
     }
     {
-        printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
-        printer.y_end = y_margin+2*space_grotesk_medium::MAX_HEIGHT+y_margin-1;
-        const auto decimal = DecimalValue(humidity);
-        printer.print('%', text_colour, radial, glyph_library);
-        printer.print('0'+decimal.digit_decimal, text_colour, radial, glyph_library);
-        printer.print('.', text_colour, radial, glyph_library);
-        printer.print('0'+decimal.digit_0, text_colour, radial, glyph_library);
-        if (decimal.absolute_value >= 100) {
-            printer.print('0'+decimal.digit_1, text_colour, radial, glyph_library);
+        namespace font = small_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        LeftToRightPrinter printer;
+        printer.x_start = x_margin;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
+        if (humidity < 100) {
+            printer.print_string("DRY AIR", radial, &font::get_glyph);
+        } else if (temperature < 300) {
+            printer.print_string("MODERATE HUMIDITY", radial, &font::get_glyph);
+        } else if (temperature < 600) {
+            printer.print_string("HEATSTROKE RISK", radial, &font::get_glyph);
+        } else {
+            printer.print_string("UNDERWATER", radial, &font::get_glyph);
         }
-        if (decimal.absolute_value >= 1000) {
-            printer.print('0'+decimal.digit_2, text_colour, radial, glyph_library);
-        }
+    }
+    {
+        namespace font = small_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        LeftToRightPrinter printer;
+        printer.x_start = x_margin;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
+        printer.print_string("WIND: 201.7KPH", radial, &font::get_glyph);
+    }
+    {
+        namespace font = small_font;
+        y_text_bottom += y_margin+font::MAX_HEIGHT;
+        LeftToRightPrinter printer;
+        printer.x_start = x_margin;
+        printer.y_end = y_text_bottom-1;
+        printer.text_colour = text_colour;
+        printer.print_string("MOON: HALF MOON", radial, &font::get_glyph);
     }
 
+    delay(1000);
     log_frame(std::format("Testing weather display with {0} degrees celcius", temperature));
 }
 
@@ -298,8 +361,10 @@ static void app_loop() {
     // test_rgb_square();
     // test_glyphs_with_solid_background();
     // test_glyphs_with_radial_background();
-    test_weather_page(-110, 69);
-    test_weather_page(95, 215);
-    test_weather_page(217, 419);
-    test_weather_page(328, 1000);
+    {
+        test_weather_page(-110, 69);
+        test_weather_page(95, 215);
+        test_weather_page(217, 419);
+        test_weather_page(328, 1000);
+    }
 }

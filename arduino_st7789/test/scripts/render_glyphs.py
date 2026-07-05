@@ -172,9 +172,14 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
         glyph_name = glyph_name.lower().replace('-','_').replace(' ', '_')
         logger.info(f"glyph='{glyph}', width={width}, height={height}, size_bytes={len(encoding)}, name={glyph_name}")
         data_body = ','.join((f"0x{value:02X}" for value in encoding))
-        data_declaration = f"static const uint8_t glyph_data_{glyph_name}[{len(encoding)}] PROGMEM = {{{ data_body }}};"
-        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, glyph_data_{glyph_name}, {len(encoding)}, {encoding_string} }};";
-        data_declarations.append(data_declaration)
+        if len(encoding) > 0:
+            glyph_array_name = f"glyph_data_{glyph_name}"
+            data_declaration = f"static const uint8_t {glyph_array_name}[{len(encoding)}] PROGMEM = {{{ data_body }}};"
+            data_declarations.append(data_declaration)
+        else:
+            glyph_array_name = "nullptr"
+
+        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, {glyph_array_name}, {len(encoding)}, {encoding_string} }};";
         glyph_declarations.append(glyph_declaration)
         switch_statement_cases.append(f"case 0x{ord(glyph):02X}: return &glyph_{glyph_name};")
 
@@ -182,18 +187,15 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
 #include "./glyph.hpp"
 #include <stdint.h>
 
-#ifndef PROGMEM
-#define PROGMEM
-#endif
-
 namespace {namespace} {{
 
 {'\n'.join(data_declarations)}
 
 {'\n'.join(glyph_declarations)}
 
-constexpr uint16_t MAX_HEIGHT = {max_height};
-constexpr uint16_t MAX_WIDTH = {max_height};
+static const uint16_t MAX_HEIGHT = {max_height};
+static const uint16_t MAX_WIDTH = {max_height};
+static const uint16_t TOTAL_GLYPHS = {len(glyphs)};
 
 static const glyph::Glyph* get_glyph(uint8_t c) {{
     switch (c) {{
