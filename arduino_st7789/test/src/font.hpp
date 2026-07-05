@@ -83,16 +83,17 @@ void write_glyph(
 class RightToLeftPrinter {
 public:
     uint16_t x_end;
-    uint16_t y_start;
+    uint16_t y_end;
 
     template <typename G, typename F>
-    bool print(char c, rgb565_t text_colour, F background_colour_source, G glyph_source) {
+    bool print(uint8_t c, rgb565_t text_colour, F background_colour_source, G glyph_source) {
         const glyph::Glyph* glyph = glyph_source(c);
         if (glyph == nullptr) return false;
         if (x_end < glyph->width-1) return false;
+        if (y_end < glyph->height-1) return false;
 
         const uint16_t x_start = x_end-(glyph->width-1);
-        const uint16_t y_end = y_start+glyph->height-1;
+        const uint16_t y_start = y_end-(glyph->height-1);
 
         background_colour_source.x_start = x_start;
         background_colour_source.y_start = y_start;

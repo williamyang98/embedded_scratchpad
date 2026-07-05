@@ -197,10 +197,36 @@ static void test_glyphs_with_radial_background() {
     }
 }
 
+struct DecimalValue {
+    int16_t value;
+    uint16_t absolute_value;
+    uint8_t digit_decimal;
+    uint8_t digit_0;
+    uint8_t digit_1;
+    uint8_t digit_2;
+    bool is_minus;
+    DecimalValue(int16_t _value) {
+        value = _value;
+        is_minus = value < 0;
+        absolute_value = value & ~(1 << 15);
+        uint16_t counter = absolute_value;
+        digit_decimal = counter % 10;
+        counter = (counter-digit_decimal) / 10;
+        digit_0 = counter % 10;
+        counter = (counter-digit_0) / 10;
+        digit_1 = counter % 10;
+        counter = (counter-digit_1) / 10;
+        digit_2 = counter % 10;
+    }
+};
+
 // temp*10 with 1 decimal precision
-static void test_weather_page(int16_t temperature) {
+static void test_weather_page(int16_t temperature, uint16_t humidity) {
     RadialBackgroundColour radial;
-    if (temperature < 200) {
+    if (temperature < 0) {
+        radial.background_colour = create_rgb565_u8(40, 40, 80);
+        radial.delta_colour = create_rgb565_bits(2,4,2);
+    } else if (temperature < 200) {
         radial.background_colour = create_rgb565_u8(30, 30, 80);
         radial.delta_colour = create_rgb565_bits(1,1,2);
     } else if (temperature < 300) {
@@ -217,24 +243,42 @@ static void test_weather_page(int16_t temperature) {
     radial.y_end = tft::SCREEN_HEIGHT-1;
     radial.fill();
 
-    uint16_t abs_temp = temperature & ~(1 << 15);
-    const uint8_t decimal = abs_temp % 10;
-    abs_temp = (abs_temp-decimal) / 10;
-    const uint8_t digit_0 = abs_temp % 10;
-    abs_temp = (abs_temp-digit_0) / 10;
-    const uint8_t digit_1 = abs_temp % 10;
-
     RightToLeftPrinter printer;
-    printer.x_end = tft::SCREEN_WIDTH-20;
-    printer.y_start = 20;
+    const uint16_t x_margin = 20;
+    const uint16_t y_margin = 20;
 
     const rgb565_t text_colour = COLOUR.WHITE;
     const auto glyph_library = space_grotesk_medium::get_glyph;
-    printer.print('C', text_colour, radial, glyph_library);
-    printer.print('0'+decimal, text_colour, radial, glyph_library);
-    printer.print('0'+digit_0, text_colour, radial, glyph_library);
-    if (digit_1 > 0) {
-        printer.print('0'+digit_1, text_colour, radial, glyph_library);
+    {
+        printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
+        printer.y_end = y_margin+space_grotesk_medium::MAX_HEIGHT-1;
+        const auto decimal = DecimalValue(temperature);
+        printer.print('C', text_colour, radial, glyph_library);
+        printer.print(0xB0, text_colour, radial, glyph_library);
+        printer.print('0'+decimal.digit_decimal, text_colour, radial, glyph_library);
+        printer.print('.', text_colour, radial, glyph_library);
+        printer.print('0'+decimal.digit_0, text_colour, radial, glyph_library);
+        if (decimal.absolute_value >= 100) {
+            printer.print('0'+decimal.digit_1, text_colour, radial, glyph_library);
+        }
+        if (decimal.is_minus) {
+            printer.print('-', text_colour, radial, glyph_library);
+        }
+    }
+    {
+        printer.x_end = tft::SCREEN_WIDTH-1-x_margin;
+        printer.y_end = y_margin+2*space_grotesk_medium::MAX_HEIGHT+y_margin-1;
+        const auto decimal = DecimalValue(humidity);
+        printer.print('%', text_colour, radial, glyph_library);
+        printer.print('0'+decimal.digit_decimal, text_colour, radial, glyph_library);
+        printer.print('.', text_colour, radial, glyph_library);
+        printer.print('0'+decimal.digit_0, text_colour, radial, glyph_library);
+        if (decimal.absolute_value >= 100) {
+            printer.print('0'+decimal.digit_1, text_colour, radial, glyph_library);
+        }
+        if (decimal.absolute_value >= 1000) {
+            printer.print('0'+decimal.digit_2, text_colour, radial, glyph_library);
+        }
     }
 
     log_frame(std::format("Testing weather display with {0} degrees celcius", temperature));
@@ -254,7 +298,8 @@ static void app_loop() {
     // test_rgb_square();
     // test_glyphs_with_solid_background();
     // test_glyphs_with_radial_background();
-    test_weather_page(105);
-    test_weather_page(217);
-    test_weather_page(328);
+    test_weather_page(-110, 69);
+    test_weather_page(95, 215);
+    test_weather_page(217, 419);
+    test_weather_page(328, 1000);
 }

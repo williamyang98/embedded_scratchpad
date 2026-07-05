@@ -8,12 +8,14 @@ struct ScreenSpaceColour {
     uint16_t y_start;
     uint16_t y_end;
     rgb565_t next_colour() = delete;
+    void reset_cursor() = delete;
 };
 
 struct SolidBackgroundColour: public ScreenSpaceColour {
     rgb565_t colour;
     SolidBackgroundColour(rgb565_t _colour): colour(_colour) {}
     inline rgb565_t next_colour() { return colour; }
+    void reset_cursor() {}
 };
 
 class RadialBackgroundColour: public ScreenSpaceColour {

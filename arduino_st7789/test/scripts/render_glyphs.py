@@ -3,6 +3,7 @@ import logging
 import os
 import numpy as np
 import argparse
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,6 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
         image = Image.new("L", (width, height), 0)
         drawer = ImageDraw.Draw(image)
         drawer.text((-bbox[0], -bbox[1]), glyph, font=font, fill=text_colour)
-        logger.info(f"width={width}, height={height}, glyph={glyph}")
         image = np.array(image)
         encoded_image = encoder(image)
         glyph_shapes.append((width, height))
@@ -161,20 +161,26 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
     logger.info(f"font={namespace}, total_size={total_bytes} bytes, total_glyphs={len(glyphs)}")
 
     encoding_string = f"glyph::{encoding_to_enum(encoding)}"
-    declarations = []
-    for glyph, (width, height), encoding in zip(glyphs, glyph_shapes, glyph_encodings):
-        data_body = ','.join((f"0x{value:02X}" for value in encoding))
-        data_declaration = f"static const uint8_t glyph_data_{glyph}[{len(encoding)}] PROGMEM = {{{ data_body }}};"
-        glyph_declaration = f"static const glyph::Glyph glyph_{glyph} = {{ {width}, {height}, glyph_data_{glyph}, {len(encoding)}, {encoding_string} }};";
-        declarations.append(data_declaration)
-        declarations.append(glyph_declaration);
-
+    data_declarations = []
+    glyph_declarations = []
     switch_statement_cases = []
-    for glyph in glyphs:
-        switch_statement_cases.append(f"case '{glyph}': return &glyph_{glyph};")
+    max_height = max((y for x, y in glyph_shapes))
+    max_width = max((x for x, y in glyph_shapes))
+
+    for glyph, (width, height), encoding in zip(glyphs, glyph_shapes, glyph_encodings):
+        glyph_name = unicodedata.name(glyph)
+        glyph_name = glyph_name.lower().replace('-','_').replace(' ', '_')
+        logger.info(f"glyph='{glyph}', width={width}, height={height}, size_bytes={len(encoding)}, name={glyph_name}")
+        data_body = ','.join((f"0x{value:02X}" for value in encoding))
+        data_declaration = f"static const uint8_t glyph_data_{glyph_name}[{len(encoding)}] PROGMEM = {{{ data_body }}};"
+        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, glyph_data_{glyph_name}, {len(encoding)}, {encoding_string} }};";
+        data_declarations.append(data_declaration)
+        glyph_declarations.append(glyph_declaration)
+        switch_statement_cases.append(f"case 0x{ord(glyph):02X}: return &glyph_{glyph_name};")
 
     header = f"""#pragma once
 #include "./glyph.hpp"
+#include <stdint.h>
 
 #ifndef PROGMEM
 #define PROGMEM
@@ -182,9 +188,14 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
 
 namespace {namespace} {{
 
-{'\n'.join(declarations)}
+{'\n'.join(data_declarations)}
 
-static const glyph::Glyph* get_glyph(char c) {{
+{'\n'.join(glyph_declarations)}
+
+constexpr uint16_t MAX_HEIGHT = {max_height};
+constexpr uint16_t MAX_WIDTH = {max_height};
+
+static const glyph::Glyph* get_glyph(uint8_t c) {{
     switch (c) {{
 {'\n'.join(('    ' + case for case in switch_statement_cases))}
     default: return nullptr;
