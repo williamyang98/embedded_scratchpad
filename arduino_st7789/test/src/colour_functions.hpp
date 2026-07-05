@@ -2,20 +2,24 @@
 #include "./rgb565.hpp"
 #include "./tft.hpp"
 
-struct SolidBackgroundColour {
-    rgb565_t colour;
-    SolidBackgroundColour(rgb565_t _colour): colour(_colour) {}
-    inline rgb565_t next_colour() const { return colour; }
-};
-
-class RadialBackgroundColour {
-public:
-    rgb565_t background_colour;
-    rgb565_t delta_colour;
+struct ScreenSpaceColour {
     uint16_t x_start;
     uint16_t x_end;
     uint16_t y_start;
     uint16_t y_end;
+    rgb565_t next_colour() = delete;
+};
+
+struct SolidBackgroundColour: public ScreenSpaceColour {
+    rgb565_t colour;
+    SolidBackgroundColour(rgb565_t _colour): colour(_colour) {}
+    inline rgb565_t next_colour() { return colour; }
+};
+
+class RadialBackgroundColour: public ScreenSpaceColour {
+public:
+    rgb565_t background_colour;
+    rgb565_t delta_colour;
     uint16_t x;
     uint16_t y;
 public:

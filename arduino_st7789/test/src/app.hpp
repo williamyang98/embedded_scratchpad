@@ -197,6 +197,49 @@ static void test_glyphs_with_radial_background() {
     }
 }
 
+// temp*10 with 1 decimal precision
+static void test_weather_page(int16_t temperature) {
+    RadialBackgroundColour radial;
+    if (temperature < 200) {
+        radial.background_colour = create_rgb565_u8(30, 30, 80);
+        radial.delta_colour = create_rgb565_bits(1,1,2);
+    } else if (temperature < 300) {
+        radial.background_colour = create_rgb565_u8(30, 80, 30);
+        radial.delta_colour = create_rgb565_bits(1,4,1);
+    } else {
+        radial.background_colour = create_rgb565_u8(80, 30, 30);
+        radial.delta_colour = create_rgb565_bits(2,1,1);
+    }
+
+    radial.x_start = 0;
+    radial.y_start = 0;
+    radial.x_end = tft::SCREEN_WIDTH-1;
+    radial.y_end = tft::SCREEN_HEIGHT-1;
+    radial.fill();
+
+    uint16_t abs_temp = temperature & ~(1 << 15);
+    const uint8_t decimal = abs_temp % 10;
+    abs_temp = (abs_temp-decimal) / 10;
+    const uint8_t digit_0 = abs_temp % 10;
+    abs_temp = (abs_temp-digit_0) / 10;
+    const uint8_t digit_1 = abs_temp % 10;
+
+    RightToLeftPrinter printer;
+    printer.x_end = tft::SCREEN_WIDTH-20;
+    printer.y_start = 20;
+
+    const rgb565_t text_colour = COLOUR.WHITE;
+    const auto glyph_library = space_grotesk_medium::get_glyph;
+    printer.print('C', text_colour, radial, glyph_library);
+    printer.print('0'+decimal, text_colour, radial, glyph_library);
+    printer.print('0'+digit_0, text_colour, radial, glyph_library);
+    if (digit_1 > 0) {
+        printer.print('0'+digit_1, text_colour, radial, glyph_library);
+    }
+
+    log_frame(std::format("Testing weather display with {0} degrees celcius", temperature));
+}
+
 static void app_setup() {
     Serial.begin(9600);
     Serial.println("Starting up st7789 controller");
@@ -205,10 +248,13 @@ static void app_setup() {
 }
 
 static void app_loop() {
-    test_screen_colours();
-    test_tunnel_colours();
-    test_circle();
-    test_rgb_square();
-    test_glyphs_with_solid_background();
-    test_glyphs_with_radial_background();
+    // test_screen_colours();
+    // test_tunnel_colours();
+    // test_circle();
+    // test_rgb_square();
+    // test_glyphs_with_solid_background();
+    // test_glyphs_with_radial_background();
+    test_weather_page(105);
+    test_weather_page(217);
+    test_weather_page(328);
 }

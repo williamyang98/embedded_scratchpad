@@ -212,7 +212,7 @@ def main():
     parser.add_argument("font", default="./fonts/SpaceGrotesk-Medium.ttf", nargs="?", help="Truefont filepath")
     parser.add_argument("--output", default=None, help="Filepath for generated header file")
     parser.add_argument("--namespace", default=None, help="Namespace used by generated header file")
-    parser.add_argument("--size", default=128, type=float, help="Font size")
+    parser.add_argument("--size", default=64, type=float, help="Font size")
     parser.add_argument("--glyphs", default="0123456789CF", type=str, help="Glyphs to generate")
     parser.add_argument("--encoding", default=Encoding.GRAYSCALE_RLE_U4, choices=[Encoding.BINARY_RLE_U8, Encoding.GRAYSCALE_RLE_U4], help="Encoding to use")
     args = parser.parse_args()
