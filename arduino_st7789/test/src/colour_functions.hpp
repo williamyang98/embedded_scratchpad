@@ -7,14 +7,16 @@ struct ScreenSpaceColour {
     uint16_t x_end;
     uint16_t y_start;
     uint16_t y_end;
-    rgb565_t next_colour() = delete;
+    void advance_cursor() = delete;
+    rgb565_t get_colour() const = delete;
     void reset_cursor() = delete;
 };
 
 struct SolidBackgroundColour: public ScreenSpaceColour {
     rgb565_t colour;
     SolidBackgroundColour(rgb565_t _colour): colour(_colour) {}
-    inline rgb565_t next_colour() { return colour; }
+    void advance_cursor() {}
+    rgb565_t get_colour() const { return colour; }
     void reset_cursor() {}
 };
 
@@ -29,8 +31,7 @@ public:
         x = x_start;
         y = y_start;
     }
-    rgb565_t next_colour() {
-        const rgb565_t colour = get_colour();
+    void advance_cursor() {
         x += 1;
         if (x > x_end) {
             x = x_start;
@@ -40,7 +41,6 @@ public:
         // if (y >= y_end) {
         //     y = y_start;
         // }
-        return colour;
     }
     rgb565_t get_colour() const {
         const uint16_t distance = get_alpha_max_plus_beta_min_distance();

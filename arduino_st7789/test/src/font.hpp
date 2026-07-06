@@ -20,17 +20,25 @@ static void write_glyph_grayscale_rle_u4(const glyph::Glyph& glyph, uint16_t x_s
     tft::begin_write_pixel();
     while (curr_pixel < total_pixels) {
         const uint8_t value = bit_reader.read_bits(2);
-        if (value == 0 || value == 3) {
+        if (value == 0) {
             const uint8_t length = bit_reader.read_bits(8);
             for (uint8_t i = 0; i < length; i++) {
-                const rgb565_t background_colour = background_colour_source.next_colour();
-                const rgb565_t colour = blend_rgb565_u4(text_colour, background_colour, value);
-                tft::write_pixel(colour);
+                const rgb565_t background_colour = background_colour_source.get_colour();
+                background_colour_source.advance_cursor();
+                tft::write_pixel(background_colour);
+            }
+            curr_pixel += static_cast<uint16_t>(length);
+        } else if (value == 3) {
+            const uint8_t length = bit_reader.read_bits(8);
+            for (uint8_t i = 0; i < length; i++) {
+                background_colour_source.advance_cursor();
+                tft::write_pixel(text_colour);
             }
             curr_pixel += static_cast<uint16_t>(length);
         } else {
-            const rgb565_t background_colour = background_colour_source.next_colour();
+            const rgb565_t background_colour = background_colour_source.get_colour();
             const rgb565_t colour = blend_rgb565_u4(text_colour, background_colour, value);
+            background_colour_source.advance_cursor();
             tft::write_pixel(colour);
             curr_pixel += 1;
         }
@@ -55,11 +63,13 @@ static void write_glyph_binary_rle_u8(const glyph::Glyph& glyph, uint16_t x_star
         const uint8_t length = data & ~mask;
         if (pixel == 0) {
             for (uint8_t i = 0; i < length; i++) {
-                const rgb565_t background_colour = background_colour_source.next_colour();
+                const rgb565_t background_colour = background_colour_source.get_colour();
+                background_colour_source.advance_cursor();
                 tft::write_pixel(background_colour);
             }
         } else {
             for (uint8_t i = 0; i < length; i++) {
+                background_colour_source.advance_cursor();
                 tft::write_pixel(text_colour);
             }
         }
