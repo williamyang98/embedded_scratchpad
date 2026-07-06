@@ -2,15 +2,50 @@ import numpy as np
 from bit_pusher import BitPusher
 
 class Encoding:
-    BINARY_RLE_U8 = "binary_rle_u8"
-    GRAYSCALE_RLE_U4 = "grayscale_rle_u4"
+    BINARY_RLE_Q1 = "binary_rle_q1"
+    GRAYSCALE_RLE_Q4 = "grayscale_rle_q4"
+    GRAYSCALE_Q4 = "grayscale_q4"
+    BINARY_Q1 = "binary_q1"
+
+    @staticmethod
+    def get_choices():
+        return [
+            Encoding.BINARY_RLE_Q1,
+            Encoding.GRAYSCALE_RLE_Q4,
+            Encoding.GRAYSCALE_Q4,
+            Encoding.BINARY_Q1,
+        ]
+
+    @staticmethod
+    def get_cpp_enum_string(encoding):
+        if encoding == Encoding.BINARY_RLE_Q1:
+            return "Encoding::BINARY_RLE_Q1"
+        elif encoding == Encoding.GRAYSCALE_RLE_Q4:
+            return "Encoding::GRAYSCALE_RLE_Q4"
+        elif encoding == Encoding.BINARY_Q1:
+            return "Encoding::BINARY_Q1"
+        elif encoding == Encoding.GRAYSCALE_Q4:
+            return "Encoding::GRAYSCALE_Q4"
+        raise Exception(f"Unknown encoding provided: {encoding}")
+
+    @staticmethod
+    def get_function(encoding):
+        if encoding == Encoding.BINARY_RLE_Q1:
+            return encode_to_binary_running_length_encoded_q1
+        elif encoding == Encoding.GRAYSCALE_RLE_Q4:
+            return encode_to_grayscale_running_length_encoded_q4
+        elif encoding == Encoding.BINARY_Q1:
+            return encode_to_binary_q1
+        elif encoding == Encoding.GRAYSCALE_Q4:
+            return encode_to_grayscale_q4
+        raise Exception(f"Unknown encoding provided: {encoding}")
 
 # encoding scheme
 # 1. quantize grayscale 0-255 to 0-3 inclusive
 # 2. store pixel value as 2 bits tightly packed, with successive bits packed into higher bits and bytes
 # 3. if pixel value is 0 or 3 store running value as 8 bit value also tightly packed
 # 4. if running value reaches 255, push the pixel value again and restart running value from 0
-def encode_to_grayscale_running_length_encoded_u4(image):
+def encode_to_grayscale_running_length_encoded_q4(image):
     assert image.dtype == np.uint8
 
     U8_MAX_VALUE = 255
@@ -55,7 +90,7 @@ def encode_to_grayscale_running_length_encoded_u4(image):
     encoding = np.array(bits.get_data(), dtype=np.uint8)
     return encoding
 
-def encode_to_binary_running_length_encoded_u8(image):
+def encode_to_binary_running_length_encoded_q1(image):
     assert image.dtype == np.uint8
 
     image = (image > 127).flatten()
@@ -89,3 +124,35 @@ def encode_to_binary_running_length_encoded_u8(image):
     encoding = np.array(encoding, dtype=np.uint8)
     return encoding
 
+
+def encode_to_grayscale_q4(image):
+    assert image.dtype == np.uint8
+
+    U8_MAX_VALUE = 255
+    U4_MAX_VALUE = 3
+    image = image.astype(np.float32)
+    image = image/U8_MAX_VALUE
+    image = image*U4_MAX_VALUE
+    image = np.round(image)
+    image = np.clip(image, 0, U4_MAX_VALUE)
+    image = image.astype(np.uint8)
+
+    bits = BitPusher()
+    image = image.flatten()
+    for pixel in image:
+        bits.push(pixel, 2)
+    encoding = np.array(bits.get_data(), dtype=np.uint8)
+    return encoding
+
+def encode_to_binary_q1(image):
+    assert image.dtype == np.uint8
+
+    image = (image > 127).flatten()
+
+    bits = BitPusher()
+    image = image.flatten()
+    for pixel in image:
+        bit = 1 if pixel else 0
+        bits.push(bit, 1)
+    encoding = np.array(bits.get_data(), dtype=np.uint8)
+    return encoding

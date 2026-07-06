@@ -10,9 +10,13 @@
 
 namespace glyph {
 
+// encodings produced by ../image_compression.py
+// RLE = running length encoding
 enum class Encoding: uint8_t {
-    GRAYSCALE_RLE_U4 = 0,
-    BINARY_RLE_U8 = 1,
+    GRAYSCALE_RLE_Q4 = 0,
+    BINARY_RLE_Q1 = 1,
+    GRAYSCALE_Q4 = 2,
+    BINARY_Q1 = 3,
 };
 
 struct Glyph {

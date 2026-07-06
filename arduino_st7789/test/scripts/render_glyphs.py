@@ -6,24 +6,13 @@ import argparse
 import unicodedata
 from tabulate import tabulate, SEPARATING_LINE
 import humanize
-from image_compression import Encoding, encode_to_binary_running_length_encoded_u8, encode_to_grayscale_running_length_encoded_u4
+from image_compression import Encoding
 
 logger = logging.getLogger(__name__)
 
-def encoding_to_cpp_string(encoding):
-    if encoding == Encoding.BINARY_RLE_U8:
-        return "Encoding::BINARY_RLE_U8"
-    elif encoding == Encoding.GRAYSCALE_RLE_U4:
-        return "Encoding::GRAYSCALE_RLE_U4"
-    raise Exception(f"Unknown encoding provided: {encoding}")
-
 def create_font_cpp_header(namespace, font, glyphs, encoding):
-
-    encoder = None
-    if encoding == Encoding.BINARY_RLE_U8:
-        encoder = encode_to_binary_running_length_encoded_u8
-    elif encoding == Encoding.GRAYSCALE_RLE_U4:
-        encoder = encode_to_grayscale_running_length_encoded_u4
+    encoder = Encoding.get_function(encoding)
+    encoder_cpp_enum = Encoding.get_cpp_enum_string(encoding)
 
     glyph_images = []
 
@@ -66,7 +55,6 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
     table_headers = ["glyph", "width", "height", "original_size", "encoded_size", "ratio", "name"]
     table_rows = []
 
-    encoding_string = f"glyph::{encoding_to_cpp_string(encoding)}"
     data_declarations = []
     glyph_declarations = []
     switch_statement_cases = []
@@ -86,11 +74,11 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
         else:
             glyph_array_name = "nullptr"
 
-        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, {glyph_array_name}, {encoded_size_bytes}, {encoding_string} }};";
+        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, {glyph_array_name}, {encoded_size_bytes}, glyph::{encoder_cpp_enum} }};";
         glyph_declarations.append(glyph_declaration)
         switch_statement_cases.append(f"case 0x{ord(glyph):02X}: return &glyph_{glyph_name};")
 
-        original_size_bytes = width*height*2/8 # 2bits per pixel
+        original_size_bytes = width*height
         compression_ratio = encoded_size_bytes/original_size_bytes
         table_rows.append([
             glyph, width, height,
@@ -157,7 +145,7 @@ def main():
     parser.add_argument("--namespace", default=None, help="Namespace used by generated header file")
     parser.add_argument("--size", default=64, type=float, help="Font size")
     parser.add_argument("--glyphs", default="0123456789CF", type=str, help="Glyphs to generate")
-    parser.add_argument("--encoding", default=Encoding.GRAYSCALE_RLE_U4, choices=[Encoding.BINARY_RLE_U8, Encoding.GRAYSCALE_RLE_U4], help="Encoding to use")
+    parser.add_argument("--encoding", default=Encoding.GRAYSCALE_RLE_Q4, choices=Encoding.get_choices(), help="Encoding to use")
     args = parser.parse_args()
 
     log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
