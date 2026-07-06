@@ -101,7 +101,6 @@ struct RightToLeftPrinter {
         background_colour_source.y_end = y_end;
         background_colour_source.reset_cursor();
         write_glyph(*glyph, x_start, y_start, text_colour, background_colour_source);
-
         x_end = x_start-1;
 
         return true;
@@ -117,6 +116,25 @@ struct RightToLeftPrinter {
             print_char(str[i], background_colour_source, glyph_source);
         }
     };
+
+    template <typename F>
+    bool pad_nothing(uint16_t width, uint16_t height, F background_colour_source) {
+        if (x_end+1 < width) return false;
+        if (y_end+1 < height) return false;
+
+        const uint16_t x_start = x_end-width+1;
+        const uint16_t y_start = y_end-height+1;
+
+        background_colour_source.x_start = x_start;
+        background_colour_source.y_start = y_start;
+        background_colour_source.x_end = x_end;
+        background_colour_source.y_end = y_end;
+        background_colour_source.reset_cursor();
+        background_colour_source.fill();
+        x_end = x_start-1;
+
+        return true;
+    }
 };
 
 struct LeftToRightPrinter {
@@ -139,7 +157,6 @@ struct LeftToRightPrinter {
         background_colour_source.y_end = y_end;
         background_colour_source.reset_cursor();
         write_glyph(*glyph, x_start, y_start, text_colour, background_colour_source);
-
         x_start = x_end+1;
 
         return true;
@@ -153,5 +170,23 @@ struct LeftToRightPrinter {
             i++;
         }
     };
+
+    template <typename F>
+    bool pad_nothing(uint16_t width, uint16_t height, F background_colour_source) {
+        const uint16_t x_end = x_start+width-1;
+        if (x_end >= tft::SCREEN_WIDTH) return false;
+        if (y_end+1 < height) return false;
+        const uint16_t y_start = y_end-height+1;
+
+        background_colour_source.x_start = x_start;
+        background_colour_source.y_start = y_start;
+        background_colour_source.x_end = x_end;
+        background_colour_source.y_end = y_end;
+        background_colour_source.reset_cursor();
+        background_colour_source.fill();
+        x_start = x_end+1;
+
+        return true;
+    }
 };
 

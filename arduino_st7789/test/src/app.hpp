@@ -61,7 +61,31 @@ private:
         uint16_t humidity_description;
         uint16_t wind_description;
         uint16_t moon_description;
-    } m_y_text_bottom;
+    } m_y_text_end;
+    struct {
+        uint16_t time;
+        uint16_t temperature;
+        uint16_t humidity;
+        void reset() {
+            const uint16_t x_end = tft::SCREEN_WIDTH-1;
+            time = x_end;
+            temperature = x_end;
+            humidity = x_end;
+        }
+    } m_x_text_end;
+    struct {
+        uint16_t weather_description;
+        uint16_t humidity_description;
+        uint16_t wind_description;
+        uint16_t moon_description;
+        void reset() {
+            const uint16_t x_start = 0;
+            weather_description = x_start;
+            humidity_description = x_start;
+            wind_description = x_start;
+            moon_description = x_start;
+        }
+    } m_x_text_start;
     uint16_t m_x_margin;
     uint16_t m_y_margin;
     struct {
@@ -123,27 +147,33 @@ public:
         m_x_margin = 10;
         m_y_margin = 10;
         {
-            uint16_t y_text_bottom = 0;
-            y_text_bottom += m_y_margin+large_font::MAX_HEIGHT;
-            m_y_text_bottom.time = y_text_bottom-1;
-            y_text_bottom += m_y_margin+large_font::MAX_HEIGHT;
-            m_y_text_bottom.temperature = y_text_bottom-1;
-            y_text_bottom += m_y_margin+large_font::MAX_HEIGHT;
-            m_y_text_bottom.humidity = y_text_bottom-1;
-            y_text_bottom += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_bottom.weather_description = y_text_bottom-1;
-            y_text_bottom += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_bottom.humidity_description = y_text_bottom-1;
-            y_text_bottom += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_bottom.wind_description = y_text_bottom-1;
-            y_text_bottom += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_bottom.moon_description = y_text_bottom-1;
+            uint16_t y_text_end = 0;
+            y_text_end += m_y_margin+large_font::MAX_HEIGHT;
+            m_y_text_end.time = y_text_end-1;
+            y_text_end += m_y_margin+large_font::MAX_HEIGHT;
+            m_y_text_end.temperature = y_text_end-1;
+            y_text_end += m_y_margin+large_font::MAX_HEIGHT;
+            m_y_text_end.humidity = y_text_end-1;
+            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            m_y_text_end.weather_description = y_text_end-1;
+            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            m_y_text_end.humidity_description = y_text_end-1;
+            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            m_y_text_end.wind_description = y_text_end-1;
+            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            m_y_text_end.moon_description = y_text_end-1;
         }
+        m_x_text_start.reset();
+        m_x_text_end.reset();
         m_background_state = BackgroundState::FREEZING;
     }
 
     void render_all() {
-        if (m_render_mask.background) render_background();
+        if (m_render_mask.background) {
+            render_background();
+            m_x_text_start.reset();
+            m_x_text_end.reset();
+        }
         if (m_render_mask.time) render_time();
         if (m_render_mask.temperature) render_temperature();
         if (m_render_mask.humidity) render_humidity();
@@ -226,10 +256,11 @@ private:
 
     void render_time() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &large_font::get_glyph;
+        namespace font = large_font;
+        const auto get_glyph = &font::get_glyph;
         RightToLeftPrinter printer;
         printer.x_end = tft::SCREEN_WIDTH-1-m_x_margin;
-        printer.y_end = m_y_text_bottom.time;
+        printer.y_end = m_y_text_end.time;
         printer.text_colour = m_text_colour;
         uint16_t time = m_time_24_hour;
         if (!m_time_display_settings.is_show_24_hour_time) {
@@ -246,14 +277,20 @@ private:
         if (m_time_display_settings.is_show_leading_zero || digits[3] > 0) {
             printer.print_char('0'+digits[3], background_colour, get_glyph);
         }
+        uint16_t& previous_x_end = m_x_text_end.time;
+        if (previous_x_end < printer.x_end) {
+            printer.pad_nothing(printer.x_end-previous_x_end, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_end = printer.x_end;
     }
 
     void render_temperature() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &large_font::get_glyph;
+        namespace font = large_font;
+        const auto get_glyph = &font::get_glyph;
         RightToLeftPrinter printer;
         printer.x_end = tft::SCREEN_WIDTH-1-m_x_margin;
-        printer.y_end = m_y_text_bottom.temperature;
+        printer.y_end = m_y_text_end.temperature;
         printer.text_colour = m_text_colour;
         const auto digits = Digits(m_temperature_celcius);
         printer.print_char('C', background_colour, get_glyph);
@@ -263,14 +300,21 @@ private:
         printer.print_char('0'+digits[1], background_colour, get_glyph);
         if (digits.leading_non_zero_digit_index >= 2) printer.print_char('0'+digits[2], background_colour, get_glyph);
         if (digits.is_minus) printer.print_char('-', background_colour, get_glyph);
+        const uint16_t curr_x_end = printer.x_end;
+        uint16_t& previous_x_end = m_x_text_end.temperature;
+        if (previous_x_end < curr_x_end) {
+            printer.pad_nothing(curr_x_end-previous_x_end, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_end = curr_x_end;
     }
 
     void render_humidity() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &large_font::get_glyph;
+        namespace font = large_font;
+        const auto get_glyph = &font::get_glyph;
         RightToLeftPrinter printer;
         printer.x_end = tft::SCREEN_WIDTH-1-m_x_margin;
-        printer.y_end = m_y_text_bottom.humidity;
+        printer.y_end = m_y_text_end.humidity;
         printer.text_colour = m_text_colour;
         const auto digits = Digits(m_humidity_percent);
         printer.print_char('%', background_colour, get_glyph);
@@ -279,14 +323,21 @@ private:
         printer.print_char('0'+digits[1], background_colour, get_glyph);
         if (digits.leading_non_zero_digit_index >= 2) printer.print_char('0'+digits[2], background_colour, get_glyph);
         if (digits.leading_non_zero_digit_index >= 3) printer.print_char('0'+digits[3], background_colour, get_glyph);
+        const uint16_t curr_x_end = printer.x_end;
+        uint16_t& previous_x_end = m_x_text_end.humidity;
+        if (previous_x_end < curr_x_end) {
+            printer.pad_nothing(curr_x_end-previous_x_end, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_end = curr_x_end;
     }
 
     void render_weather_description() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &small_font::get_glyph;
+        namespace font = small_font;
+        const auto get_glyph = &font::get_glyph;
         LeftToRightPrinter printer;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_bottom.weather_description;
+        printer.y_end = m_y_text_end.weather_description;
         printer.text_colour = m_text_colour;
         const char* description = nullptr;
         if (m_temperature_celcius < 0) {
@@ -301,14 +352,21 @@ private:
         if (description != nullptr) {
             printer.print_string(description, background_colour, get_glyph);
         }
+        const uint16_t curr_x_start = printer.x_start;
+        uint16_t& previous_x_start = m_x_text_start.weather_description;
+        if (previous_x_start > curr_x_start) {
+            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_start = curr_x_start;
     }
 
     void render_humidity_description() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &small_font::get_glyph;
+        namespace font = small_font;
+        const auto get_glyph = &font::get_glyph;
         LeftToRightPrinter printer;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_bottom.humidity_description;
+        printer.y_end = m_y_text_end.humidity_description;
         printer.text_colour = m_text_colour;
         const char* description = nullptr;
         if (m_humidity_percent < 100) {
@@ -323,14 +381,21 @@ private:
         if (description != nullptr) {
             printer.print_string(description, background_colour, get_glyph);
         }
+        const uint16_t curr_x_start = printer.x_start;
+        uint16_t& previous_x_start = m_x_text_start.humidity_description;
+        if (previous_x_start > curr_x_start) {
+            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_start = curr_x_start;
     }
 
     void render_wind_description() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &small_font::get_glyph;
+        namespace font = small_font;
+        const auto get_glyph = &font::get_glyph;
         LeftToRightPrinter printer;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_bottom.wind_description;
+        printer.y_end = m_y_text_end.wind_description;
         printer.text_colour = m_text_colour;
         printer.print_string("WIND: ", background_colour, get_glyph);
         const auto digits = Digits(m_wind_kph);
@@ -342,16 +407,29 @@ private:
             printer.print_char('0'+digit, background_colour, get_glyph);
         }
         printer.print_string("KPH", background_colour, get_glyph);
+        const uint16_t curr_x_start = printer.x_start;
+        uint16_t& previous_x_start = m_x_text_start.wind_description;
+        if (previous_x_start > curr_x_start) {
+            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_start = curr_x_start;
     }
 
     void render_moon_description() {
         auto& background_colour = get_background_colour();
-        const auto get_glyph = &small_font::get_glyph;
+        namespace font = small_font;
+        const auto get_glyph = &font::get_glyph;
         LeftToRightPrinter printer;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_bottom.moon_description;
+        printer.y_end = m_y_text_end.moon_description;
         printer.text_colour = m_text_colour;
         printer.print_string("MOON: HALF MOON", background_colour, get_glyph);
+        const uint16_t curr_x_start = printer.x_start;
+        uint16_t& previous_x_start = m_x_text_start.moon_description;
+        if (previous_x_start > curr_x_start) {
+            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
+        }
+        previous_x_start = curr_x_start;
     }
 };
 
@@ -384,7 +462,7 @@ static void app_loop() {
     app.render_all();
     delay(1000);
 
-    app.set_time(0047);
+    app.set_time(47);
     app.set_time_show_24_hour(false);
     app.set_time_show_leading_zero(false);
     app.set_temperature(217);
@@ -401,4 +479,13 @@ static void app_loop() {
     app.set_wind(1017);
     app.render_all();
     delay(1000);
+
+    constexpr uint8_t TOTAL_TIMES = 5;
+    const uint16_t TEST_TIMES[TOTAL_TIMES] = { 1000, 100, 1230, 1890, 111 };
+    for (uint8_t i = 0; i < TOTAL_TIMES; i++) {
+        const uint16_t time = TEST_TIMES[i];
+        app.set_time(time);
+        app.render_all();
+        delay(1000);
+    }
 }
