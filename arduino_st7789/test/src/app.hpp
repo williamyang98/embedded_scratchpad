@@ -26,38 +26,32 @@ private:
         bool is_show_leading_zero;
     } m_time_display_settings;
     struct {
-        uint16_t time;
-        uint16_t temperature;
-        uint16_t humidity;
-        uint16_t weather_description;
-        uint16_t humidity_description;
-        uint16_t wind_description;
-        uint16_t moon_description;
-    } m_y_text_end;
-    struct {
-        uint16_t time;
-        uint16_t temperature;
-        uint16_t humidity;
+        RightToLeftPrinter time;
+        RightToLeftPrinter temperature;
+        RightToLeftPrinter humidity;
+        LeftToRightPrinter weather_description;
+        LeftToRightPrinter humidity_description;
+        LeftToRightPrinter wind_description;
+        LeftToRightPrinter moon_description;
         void reset() {
-            const uint16_t x_end = tft::SCREEN_WIDTH-1;
-            time = x_end;
-            temperature = x_end;
-            humidity = x_end;
+            time.reset_x_end();
+            temperature.reset_x_end();
+            humidity.reset_x_end();
+            weather_description.reset_x_start();
+            humidity_description.reset_x_start();
+            wind_description.reset_x_start();
+            moon_description.reset_x_start();
         }
-    } m_x_text_end;
-    struct {
-        uint16_t weather_description;
-        uint16_t humidity_description;
-        uint16_t wind_description;
-        uint16_t moon_description;
-        void reset() {
-            const uint16_t x_start = 0;
-            weather_description = x_start;
-            humidity_description = x_start;
-            wind_description = x_start;
-            moon_description = x_start;
+        void set_text_colour(rgb565_t text_colour) {
+            time.text_colour = text_colour;
+            temperature.text_colour = text_colour;
+            humidity.text_colour = text_colour;
+            weather_description.text_colour = text_colour;
+            humidity_description.text_colour = text_colour;
+            wind_description.text_colour = text_colour;
+            moon_description.text_colour = text_colour;
         }
-    } m_x_text_start;
+    } m_printers;
     uint16_t m_x_margin;
     uint16_t m_y_margin;
     struct {
@@ -92,7 +86,6 @@ private:
             moon_description = state;
         }
     } m_render_mask;
-    rgb565_t m_text_colour;
 public:
     App() {
         m_temperature_celcius = 0;
@@ -114,37 +107,33 @@ public:
 
         m_render_mask.set_all(true);
 
-        m_text_colour = COLOUR.WHITE;
-
         m_x_margin = 10;
         m_y_margin = 10;
         {
             uint16_t y_text_end = 0;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
-            m_y_text_end.time = y_text_end-1;
+            m_printers.time.y_end = y_text_end-1;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
-            m_y_text_end.temperature = y_text_end-1;
+            m_printers.temperature.y_end = y_text_end-1;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
-            m_y_text_end.humidity = y_text_end-1;
+            m_printers.humidity.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_end.weather_description = y_text_end-1;
+            m_printers.weather_description.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_end.humidity_description = y_text_end-1;
+            m_printers.humidity_description.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_end.wind_description = y_text_end-1;
+            m_printers.wind_description.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
-            m_y_text_end.moon_description = y_text_end-1;
+            m_printers.moon_description.y_end = y_text_end-1;
         }
-        m_x_text_start.reset();
-        m_x_text_end.reset();
+        m_printers.set_text_colour(COLOUR.WHITE);
         m_background_state = BackgroundState::FREEZING;
     }
 
     void render_all() {
         if (m_render_mask.background) {
             render_background();
-            m_x_text_start.reset();
-            m_x_text_end.reset();
+            m_printers.reset();
         }
         if (m_render_mask.time) render_time();
         if (m_render_mask.temperature) render_temperature();
@@ -230,10 +219,8 @@ private:
         auto& background_colour = get_background_colour();
         namespace font = large_font;
         const auto get_glyph = &font::get_glyph;
-        RightToLeftPrinter printer;
+        auto& printer = m_printers.time;
         printer.x_end = tft::SCREEN_WIDTH-1-m_x_margin;
-        printer.y_end = m_y_text_end.time;
-        printer.text_colour = m_text_colour;
         uint16_t time = m_time_24_hour;
         if (!m_time_display_settings.is_show_24_hour_time) {
             if (time >= 2400) time -= 2400;
@@ -249,21 +236,15 @@ private:
         if (m_time_display_settings.is_show_leading_zero || digits[3] > 0) {
             printer.print_char('0'+digits[3], background_colour, get_glyph);
         }
-        uint16_t& previous_x_end = m_x_text_end.time;
-        if (previous_x_end < printer.x_end) {
-            printer.pad_nothing(printer.x_end-previous_x_end, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_end = printer.x_end;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
     void render_temperature() {
         auto& background_colour = get_background_colour();
         namespace font = large_font;
         const auto get_glyph = &font::get_glyph;
-        RightToLeftPrinter printer;
+        auto& printer = m_printers.temperature;
         printer.x_end = tft::SCREEN_WIDTH-1-m_x_margin;
-        printer.y_end = m_y_text_end.temperature;
-        printer.text_colour = m_text_colour;
         const auto digits = Digits(m_temperature_celcius);
         printer.print_char('C', background_colour, get_glyph);
         printer.print_char(0xB0, background_colour, get_glyph);
@@ -272,22 +253,15 @@ private:
         printer.print_char('0'+digits[1], background_colour, get_glyph);
         if (digits.leading_non_zero_digit_index >= 2) printer.print_char('0'+digits[2], background_colour, get_glyph);
         if (digits.is_minus) printer.print_char('-', background_colour, get_glyph);
-        const uint16_t curr_x_end = printer.x_end;
-        uint16_t& previous_x_end = m_x_text_end.temperature;
-        if (previous_x_end < curr_x_end) {
-            printer.pad_nothing(curr_x_end-previous_x_end, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_end = curr_x_end;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
     void render_humidity() {
         auto& background_colour = get_background_colour();
         namespace font = large_font;
         const auto get_glyph = &font::get_glyph;
-        RightToLeftPrinter printer;
+        auto& printer = m_printers.humidity;
         printer.x_end = tft::SCREEN_WIDTH-1-m_x_margin;
-        printer.y_end = m_y_text_end.humidity;
-        printer.text_colour = m_text_colour;
         const auto digits = Digits(m_humidity_percent);
         printer.print_char('%', background_colour, get_glyph);
         printer.print_char('0'+digits[0], background_colour, get_glyph);
@@ -295,22 +269,15 @@ private:
         printer.print_char('0'+digits[1], background_colour, get_glyph);
         if (digits.leading_non_zero_digit_index >= 2) printer.print_char('0'+digits[2], background_colour, get_glyph);
         if (digits.leading_non_zero_digit_index >= 3) printer.print_char('0'+digits[3], background_colour, get_glyph);
-        const uint16_t curr_x_end = printer.x_end;
-        uint16_t& previous_x_end = m_x_text_end.humidity;
-        if (previous_x_end < curr_x_end) {
-            printer.pad_nothing(curr_x_end-previous_x_end, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_end = curr_x_end;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
     void render_weather_description() {
         auto& background_colour = get_background_colour();
         namespace font = small_font;
         const auto get_glyph = &font::get_glyph;
-        LeftToRightPrinter printer;
+        auto& printer = m_printers.weather_description;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_end.weather_description;
-        printer.text_colour = m_text_colour;
         const char* description = nullptr;
         if (m_temperature_celcius < 0) {
             description = "HEAVY SNOWSTORM";
@@ -324,22 +291,15 @@ private:
         if (description != nullptr) {
             printer.print_string(description, background_colour, get_glyph);
         }
-        const uint16_t curr_x_start = printer.x_start;
-        uint16_t& previous_x_start = m_x_text_start.weather_description;
-        if (previous_x_start > curr_x_start) {
-            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_start = curr_x_start;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
     void render_humidity_description() {
         auto& background_colour = get_background_colour();
         namespace font = small_font;
         const auto get_glyph = &font::get_glyph;
-        LeftToRightPrinter printer;
+        auto& printer = m_printers.humidity_description;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_end.humidity_description;
-        printer.text_colour = m_text_colour;
         const char* description = nullptr;
         if (m_humidity_percent < 100) {
             description = "DRY AIR";
@@ -353,22 +313,15 @@ private:
         if (description != nullptr) {
             printer.print_string(description, background_colour, get_glyph);
         }
-        const uint16_t curr_x_start = printer.x_start;
-        uint16_t& previous_x_start = m_x_text_start.humidity_description;
-        if (previous_x_start > curr_x_start) {
-            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_start = curr_x_start;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
     void render_wind_description() {
         auto& background_colour = get_background_colour();
         namespace font = small_font;
         const auto get_glyph = &font::get_glyph;
-        LeftToRightPrinter printer;
+        auto& printer = m_printers.wind_description;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_end.wind_description;
-        printer.text_colour = m_text_colour;
         printer.print_string("WIND: ", background_colour, get_glyph);
         const auto digits = Digits(m_wind_kph);
         int8_t leading_non_zero_digit_index = digits.leading_non_zero_digit_index;
@@ -379,29 +332,17 @@ private:
             printer.print_char('0'+digit, background_colour, get_glyph);
         }
         printer.print_string("KPH", background_colour, get_glyph);
-        const uint16_t curr_x_start = printer.x_start;
-        uint16_t& previous_x_start = m_x_text_start.wind_description;
-        if (previous_x_start > curr_x_start) {
-            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_start = curr_x_start;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
     void render_moon_description() {
         auto& background_colour = get_background_colour();
         namespace font = small_font;
         const auto get_glyph = &font::get_glyph;
-        LeftToRightPrinter printer;
+        auto& printer = m_printers.moon_description;
         printer.x_start = m_x_margin;
-        printer.y_end = m_y_text_end.moon_description;
-        printer.text_colour = m_text_colour;
         printer.print_string("MOON: HALF MOON", background_colour, get_glyph);
-        const uint16_t curr_x_start = printer.x_start;
-        uint16_t& previous_x_start = m_x_text_start.moon_description;
-        if (previous_x_start > curr_x_start) {
-            printer.pad_nothing(previous_x_start-curr_x_start, font::MAX_HEIGHT, background_colour);
-        }
-        previous_x_start = curr_x_start;
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 };
 
