@@ -70,12 +70,7 @@ private:
         WARM = 2,
         HOT = 3,
     } m_background_state;
-    enum class WeatherIconState: uint8_t {
-        WINTER = 0,
-        WIND = 1,
-        SPRING = 2,
-        SUNNY = 3,
-    } m_weather_icon_state;
+    icons::Icon m_weather_icon_state;
     struct {
         bool background;
         bool time;
@@ -100,6 +95,8 @@ private:
     } m_render_mask;
 public:
     App() {
+        m_render_mask.set_all(true);
+
         m_temperature_celcius = 0;
         m_humidity_percent = 0;
         m_time_24_hour = 0;
@@ -116,9 +113,7 @@ public:
         m_background_colour.hot.background_colour = create_rgb565_u8(80, 30, 30);
         m_background_colour.hot.delta_colour = create_rgb565_bits(2,1,1);
         m_background_state = BackgroundState::FREEZING;
-        m_weather_icon_state = WeatherIconState::SUNNY;
-
-        m_render_mask.set_all(true);
+        m_weather_icon_state = icons::Icon::SUNNY;
 
         m_x_margin = 10;
         m_y_margin = 10;
@@ -166,17 +161,9 @@ public:
         const bool is_changed = m_temperature_celcius != temperature_celcius;
         m_render_mask.temperature |= is_changed;
         m_render_mask.weather_description |= is_changed;
-        const auto new_background_state = get_background_state_from_temperature(temperature_celcius);
-        if (new_background_state != m_background_state) {
-            m_render_mask.background |= true;
-        }
-        const auto new_weather_state = get_weather_icon_state_from_temperature(temperature_celcius);
-        if (new_weather_state != m_weather_icon_state) {
-            m_render_mask.weather_icon |= true;
-        }
         m_temperature_celcius = temperature_celcius;
-        m_background_state = new_background_state;
-        m_weather_icon_state = new_weather_state;
+        update_background_state();
+        update_weather_icon_state();
     }
 
     void set_humidity(uint16_t humidity_percent) {
@@ -184,12 +171,14 @@ public:
         m_render_mask.humidity |= is_changed;
         m_render_mask.humidity_description |= is_changed;
         m_humidity_percent = humidity_percent;
+        update_weather_icon_state();
     }
 
     void set_time(uint16_t time_24_hour) {
         const bool is_changed = m_time_24_hour != time_24_hour;
         m_render_mask.time |= is_changed;
         m_time_24_hour = time_24_hour;
+        update_weather_icon_state();
     }
 
     void set_time_show_24_hour(bool is_show_24_hour) {
@@ -208,6 +197,7 @@ public:
         const bool is_changed = m_wind_kph != wind_kph;
         m_render_mask.wind_description |= is_changed;
         m_wind_kph = wind_kph;
+        update_weather_icon_state();
     }
 private:
     RadialBackgroundColour& get_background_colour() {
@@ -220,28 +210,44 @@ private:
         }
     }
 
-    static BackgroundState get_background_state_from_temperature(int16_t temperature) {
-        if (temperature < 0) return BackgroundState::FREEZING;
-        if (temperature < 200) return BackgroundState::COLD;
-        if (temperature < 300) return BackgroundState::WARM;
-        return BackgroundState::HOT;
-    }
-
-    const glyph::Glyph& get_weather_icon() {
-        switch (m_weather_icon_state) {
-        case WeatherIconState::WINTER: return icons::icon_winter;
-        case WeatherIconState::WIND: return icons::icon_wind;
-        case WeatherIconState::SPRING: return icons::icon_spring;
-        case WeatherIconState::SUNNY: return icons::icon_sunny;
-        return icons::icon_sunny;
+    bool update_background_state() {
+        BackgroundState new_state = m_background_state;
+        if (m_temperature_celcius < 0) {
+            new_state = BackgroundState::FREEZING;
+        } else if (m_temperature_celcius < 200) {
+            new_state = BackgroundState::COLD;
+        } else if (m_temperature_celcius < 300) {
+            new_state = BackgroundState::WARM;
+        } else {
+            new_state = BackgroundState::HOT;
         }
+        const bool is_changed = new_state != m_background_state;
+        m_render_mask.background |= is_changed;
+        m_background_state = new_state;
+        return false;
     }
 
-    static WeatherIconState get_weather_icon_state_from_temperature(int16_t temperature) {
-        if (temperature < 0) return WeatherIconState::WINTER;
-        if (temperature < 200) return WeatherIconState::WIND;
-        if (temperature < 300) return WeatherIconState::SPRING;
-        return WeatherIconState::SUNNY;
+    bool update_weather_icon_state() {
+        icons::Icon new_state = m_weather_icon_state;
+        if (m_time_24_hour < 600) {
+            new_state = icons::Icon::FULL_MOON;
+        } else if (m_wind_kph > 300) {
+            new_state = icons::Icon::WIND;
+        } else if (m_humidity_percent > 400) {
+            new_state = icons::Icon::WET;
+        } else if (m_temperature_celcius < 0)  {
+            new_state = icons::Icon::WINTER;
+        } else if (m_temperature_celcius < 200) {
+            new_state = icons::Icon::PARTLY_CLOUDY;
+        } else if (m_temperature_celcius < 300) {
+            new_state = icons::Icon::SPRING;
+        } else {
+            new_state = icons::Icon::SUNNY;
+        }
+        const bool is_changed = new_state != m_weather_icon_state;
+        m_render_mask.weather_icon |= is_changed;
+        m_weather_icon_state = new_state;
+        return false;
     }
 
     void render_background() {
@@ -298,8 +304,10 @@ private:
         auto& background_colour = get_background_colour();
         auto& printer = m_printers.weather_icon;
         printer.x_start = m_x_margin;
-        const auto& icon = get_weather_icon();
-        printer.print_glyph(icon, background_colour);
+        const auto* icon = icons::get_icon(m_weather_icon_state);
+        if (icon != nullptr) {
+            printer.print_glyph(*icon, background_colour);
+        }
         printer.cleanup_previous_prints(icons::MAX_HEIGHT, background_colour);
     }
 
@@ -446,13 +454,18 @@ static void app_loop() {
     for (uint8_t i = 0; i < TOTAL_TIMES; i++) {
         const uint16_t time = TEST_TIMES[i];
         app.set_time(time);
+        app.set_wind(217);
         app.render_all();
         delay(1000);
     }
     for (uint8_t i = 0; i <= 120; i+=1) {
-        const uint16_t hours = i / 60;
-        const uint16_t minutes = i - hours*60;
-        const uint16_t time = 1300 + minutes + 100*hours;
+        const uint8_t j = i+45;
+        const uint16_t hours = j / 60;
+        const uint16_t minutes = j - hours*60;
+        const uint16_t time = 500 + minutes + 100*hours;
+        app.set_temperature(425-int16_t(i)*5);
+        app.set_wind(317-i);
+        app.set_humidity(600-uint16_t(i)*8);
         app.set_time(time);
         app.render_all();
     }

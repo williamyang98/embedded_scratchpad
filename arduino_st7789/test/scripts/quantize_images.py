@@ -70,6 +70,8 @@ def main():
     table_rows = []
     data_declarations = []
     glyph_declarations = []
+    enum_names = []
+    switch_statement_cases = []
     all_total_bytes = 0
 
     encoding_cpp_enum = "glyph::Encoding::RGBA_Q256_PALETTE"
@@ -77,7 +79,7 @@ def main():
     max_width = max((image.shape[1] for image in all_images))
     max_height = max((image.shape[0] for image in all_images))
  
-    for solid_mask, labels, name in zip(all_solid_masks, all_labels, all_names):
+    for index, (solid_mask, labels, name) in enumerate(zip(all_solid_masks, all_labels, all_names)):
         height, width = solid_mask.shape
         quantized_image = np.zeros((height, width), dtype=np.uint8)
         quantized_image[~solid_mask] = 255
@@ -91,6 +93,10 @@ def main():
 
         glyph_declaration = f"static const glyph::Glyph icon_{name} = {{ {width}, {height}, {icon_array_name}, {total_bytes}, {encoding_cpp_enum} }};";
         glyph_declarations.append(glyph_declaration)
+
+        enum_name = name.upper()
+        enum_names.append(f"{enum_name} = {index},")
+        switch_statement_cases.append(f"case Icon::{enum_name}: return &icon_{name};")
 
         all_quantized_images.append(quantized_image)
         all_total_bytes += total_bytes
@@ -124,7 +130,17 @@ static const uint16_t RGB565_COLOUR_PALETTE[{len(rgb565_colour_palette)}] PROGME
 static const uint16_t MAX_HEIGHT = {max_height};
 static const uint16_t MAX_WIDTH = {max_height};
 static const uint8_t TOTAL_ICONS = {len(all_names)};
-static const glyph::Glyph* icons[TOTAL_ICONS] = {{{','.join(f"&icon_{name}" for name in all_names)}}};
+
+enum class Icon: uint8_t {{
+{'\n'.join(('    ' + name for name in enum_names))}
+}};
+
+static const glyph::Glyph* get_icon(Icon icon) {{
+    switch (icon) {{
+{'\n'.join(('    ' + case for case in switch_statement_cases))}
+    default: return nullptr;
+    }}
+}}
 
 }};
 """
