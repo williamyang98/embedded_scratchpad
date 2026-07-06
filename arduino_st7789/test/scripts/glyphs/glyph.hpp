@@ -17,6 +17,7 @@ enum class Encoding: uint8_t {
     BINARY_RLE_Q1 = 1,
     GRAYSCALE_Q4 = 2,
     BINARY_Q1 = 3,
+    RGBA_Q256_PALETTE = 4,
 };
 
 struct Glyph {

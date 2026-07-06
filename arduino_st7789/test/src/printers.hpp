@@ -107,12 +107,6 @@ struct LeftToRightPrinter {
         if (x_end >= tft::SCREEN_WIDTH) return false;
         if (y_end+1 < glyph.height) return false;
         const uint16_t y_start = y_end-glyph.height+1;
-
-        background_colour_source.x_start = x_start;
-        background_colour_source.y_start = y_start;
-        background_colour_source.x_end = x_end;
-        background_colour_source.y_end = y_end;
-        background_colour_source.reset_cursor();
         write_glyph(glyph, x_start, y_start, text_colour, background_colour_source);
         x_start = x_end+1;
 

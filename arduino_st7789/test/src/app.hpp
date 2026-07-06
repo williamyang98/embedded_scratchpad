@@ -6,6 +6,7 @@
 #include "./colour_functions.hpp"
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
+#include "../scripts/glyphs/icons.hpp"
 
 #ifdef TEST_HARNESS
 #include <format>
@@ -33,6 +34,7 @@ private:
         LeftToRightPrinter humidity_description;
         LeftToRightPrinter wind_description;
         LeftToRightPrinter moon_description;
+        LeftToRightPrinter weather_icon;
         void reset() {
             time.reset_x_end();
             temperature.reset_x_end();
@@ -41,6 +43,7 @@ private:
             humidity_description.reset_x_start();
             wind_description.reset_x_start();
             moon_description.reset_x_start();
+            weather_icon.reset_x_start();
         }
         void set_text_colour(rgb565_t text_colour) {
             time.text_colour = text_colour;
@@ -50,6 +53,7 @@ private:
             humidity_description.text_colour = text_colour;
             wind_description.text_colour = text_colour;
             moon_description.text_colour = text_colour;
+            weather_icon.text_colour = text_colour;
         }
     } m_printers;
     uint16_t m_x_margin;
@@ -66,6 +70,12 @@ private:
         WARM = 2,
         HOT = 3,
     } m_background_state;
+    enum class WeatherIconState: uint8_t {
+        WINTER = 0,
+        WIND = 1,
+        SPRING = 2,
+        SUNNY = 3,
+    } m_weather_icon_state;
     struct {
         bool background;
         bool time;
@@ -75,6 +85,7 @@ private:
         bool humidity_description;
         bool wind_description;
         bool moon_description;
+        bool weather_icon;
         void set_all(bool state) {
             background = state;
             time = state;
@@ -84,6 +95,7 @@ private:
             humidity_description = state;
             wind_description = state;
             moon_description = state;
+            weather_icon = state;
         }
     } m_render_mask;
 public:
@@ -104,6 +116,7 @@ public:
         m_background_colour.hot.background_colour = create_rgb565_u8(80, 30, 30);
         m_background_colour.hot.delta_colour = create_rgb565_bits(2,1,1);
         m_background_state = BackgroundState::FREEZING;
+        m_weather_icon_state = WeatherIconState::SUNNY;
 
         m_render_mask.set_all(true);
 
@@ -115,6 +128,7 @@ public:
             m_printers.time.y_end = y_text_end-1;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
             m_printers.temperature.y_end = y_text_end-1;
+            m_printers.weather_icon.y_end = y_text_end-1;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
             m_printers.humidity.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
@@ -134,9 +148,11 @@ public:
         if (m_render_mask.background) {
             render_background();
             m_printers.reset();
+            m_render_mask.set_all(true);
         }
         if (m_render_mask.time) render_time();
         if (m_render_mask.temperature) render_temperature();
+        if (m_render_mask.weather_icon) render_weather_icon();
         if (m_render_mask.humidity) render_humidity();
         if (m_render_mask.weather_description) render_weather_description();
         if (m_render_mask.humidity_description) render_humidity_description();
@@ -152,10 +168,15 @@ public:
         m_render_mask.weather_description |= is_changed;
         const auto new_background_state = get_background_state_from_temperature(temperature_celcius);
         if (new_background_state != m_background_state) {
-            m_render_mask.set_all(true);
+            m_render_mask.background |= true;
+        }
+        const auto new_weather_state = get_weather_icon_state_from_temperature(temperature_celcius);
+        if (new_weather_state != m_weather_icon_state) {
+            m_render_mask.weather_icon |= true;
         }
         m_temperature_celcius = temperature_celcius;
         m_background_state = new_background_state;
+        m_weather_icon_state = new_weather_state;
     }
 
     void set_humidity(uint16_t humidity_percent) {
@@ -204,6 +225,23 @@ private:
         if (temperature < 200) return BackgroundState::COLD;
         if (temperature < 300) return BackgroundState::WARM;
         return BackgroundState::HOT;
+    }
+
+    const glyph::Glyph& get_weather_icon() {
+        switch (m_weather_icon_state) {
+        case WeatherIconState::WINTER: return icons::icon_winter;
+        case WeatherIconState::WIND: return icons::icon_wind;
+        case WeatherIconState::SPRING: return icons::icon_spring;
+        case WeatherIconState::SUNNY: return icons::icon_sunny;
+        return icons::icon_sunny;
+        }
+    }
+
+    static WeatherIconState get_weather_icon_state_from_temperature(int16_t temperature) {
+        if (temperature < 0) return WeatherIconState::WINTER;
+        if (temperature < 200) return WeatherIconState::WIND;
+        if (temperature < 300) return WeatherIconState::SPRING;
+        return WeatherIconState::SUNNY;
     }
 
     void render_background() {
@@ -255,6 +293,16 @@ private:
         if (digits.is_minus) printer.print_char('-', background_colour, get_glyph);
         printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
+
+    void render_weather_icon() {
+        auto& background_colour = get_background_colour();
+        auto& printer = m_printers.weather_icon;
+        printer.x_start = m_x_margin;
+        const auto& icon = get_weather_icon();
+        printer.print_glyph(icon, background_colour);
+        printer.cleanup_previous_prints(icons::MAX_HEIGHT, background_colour);
+    }
+
 
     void render_humidity() {
         auto& background_colour = get_background_colour();

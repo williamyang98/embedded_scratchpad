@@ -3,6 +3,7 @@
 
 #ifdef TEST_HARNESS
 #define pgm_read_byte(x) *(x)
+#define pgm_read_word(x) *(x)
 #else
 #include <avr/pgmspace.h>
 #endif

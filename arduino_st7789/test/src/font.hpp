@@ -4,6 +4,7 @@
 #include "./tft.hpp"
 #include "./rgb565.hpp"
 #include "../scripts/glyphs/glyph.hpp"
+#include "../scripts/glyphs/icons.hpp"
 
 template <typename F>
 static void write_glyph_grayscale_rle_q4(const glyph::Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, F background_colour_source) {
@@ -11,12 +12,17 @@ static void write_glyph_grayscale_rle_q4(const glyph::Glyph& glyph, uint16_t x_s
     const uint16_t height = glyph.height;
     const uint16_t x_end = static_cast<uint16_t>(x_start+width-1);
     const uint16_t y_end = static_cast<uint16_t>(y_start+height-1);
-    tft::set_write_rect(x_start, x_end, y_start, y_end);
+    background_colour_source.x_start = x_start;
+    background_colour_source.x_end = x_end;
+    background_colour_source.y_start = y_start;
+    background_colour_source.y_end = y_end;
+    background_colour_source.reset_cursor();
 
     const uint16_t total_pixels = width*height;
     uint16_t curr_pixel = 0;
     BitReader bit_reader(glyph.data);
 
+    tft::set_write_rect(x_start, x_end, y_start, y_end);
     tft::begin_write_pixel();
     while (curr_pixel < total_pixels) {
         const uint8_t pixel = bit_reader.read_bits(2);
@@ -52,8 +58,13 @@ static void write_glyph_binary_rle_q1(const glyph::Glyph& glyph, uint16_t x_star
     const uint16_t height = glyph.height;
     const uint16_t x_end = static_cast<uint16_t>(x_start+width-1);
     const uint16_t y_end = static_cast<uint16_t>(y_start+height-1);
-    tft::set_write_rect(x_start, x_end, y_start, y_end);
+    background_colour_source.x_start = x_start;
+    background_colour_source.x_end = x_end;
+    background_colour_source.y_start = y_start;
+    background_colour_source.y_end = y_end;
+    background_colour_source.reset_cursor();
 
+    tft::set_write_rect(x_start, x_end, y_start, y_end);
     tft::begin_write_pixel();
     constexpr uint8_t mask = 0b10000000;
     const uint16_t total_data = glyph.data_length;
@@ -83,8 +94,13 @@ static void write_glyph_binary_q1(const glyph::Glyph& glyph, uint16_t x_start, u
     const uint8_t height = glyph.height;
     const uint16_t x_end = static_cast<uint16_t>(x_start+uint16_t(width)-1);
     const uint16_t y_end = static_cast<uint16_t>(y_start+uint16_t(height)-1);
-    tft::set_write_rect(x_start, x_end, y_start, y_end);
+    background_colour_source.x_start = x_start;
+    background_colour_source.x_end = x_end;
+    background_colour_source.y_start = y_start;
+    background_colour_source.y_end = y_end;
+    background_colour_source.reset_cursor();
 
+    tft::set_write_rect(x_start, x_end, y_start, y_end);
     tft::begin_write_pixel();
     uint8_t data = pgm_read_byte(glyph.data + 0);
     uint8_t curr_bit = 0;
@@ -118,8 +134,13 @@ static void write_glyph_grayscale_q4(const glyph::Glyph& glyph, uint16_t x_start
     const uint8_t height = glyph.height;
     const uint16_t x_end = static_cast<uint16_t>(x_start+uint16_t(width)-1);
     const uint16_t y_end = static_cast<uint16_t>(y_start+uint16_t(height)-1);
-    tft::set_write_rect(x_start, x_end, y_start, y_end);
+    background_colour_source.x_start = x_start;
+    background_colour_source.x_end = x_end;
+    background_colour_source.y_start = y_start;
+    background_colour_source.y_end = y_end;
+    background_colour_source.reset_cursor();
 
+    tft::set_write_rect(x_start, x_end, y_start, y_end);
     tft::begin_write_pixel();
     uint8_t data = pgm_read_byte(glyph.data + 0);
     uint8_t curr_bit = 0;
@@ -153,16 +174,47 @@ static void write_glyph_grayscale_q4(const glyph::Glyph& glyph, uint16_t x_start
 }
 
 template <typename F>
+static void write_glyph_rgba_q256_palette(const glyph::Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, F background_colour_source) {
+    const uint8_t width = glyph.width;
+    const uint8_t height = glyph.height;
+    const uint16_t x_end = static_cast<uint16_t>(x_start+uint16_t(width)-1);
+    const uint16_t y_end = static_cast<uint16_t>(y_start+uint16_t(height)-1);
+    background_colour_source.x_start = x_start;
+    background_colour_source.x_end = x_end;
+    background_colour_source.y_start = y_start;
+    background_colour_source.y_end = y_end;
+    background_colour_source.reset_cursor();
+
+    tft::set_write_rect(x_start, x_end, y_start, y_end);
+    tft::begin_write_pixel();
+    const uint16_t total_pixels = static_cast<uint8_t>(width)*static_cast<uint8_t>(height);
+    for (uint16_t i = 0; i < total_pixels; i++) {
+        const uint8_t palette_index = pgm_read_byte(glyph.data + i);
+        if (palette_index == 255) {
+            const rgb565_t background_colour = background_colour_source.get_colour();
+            background_colour_source.advance_cursor();
+            tft::write_pixel(background_colour);
+        } else {
+            const rgb565_t icon_colour = pgm_read_word(icons::RGB565_COLOUR_PALETTE + palette_index);
+            background_colour_source.advance_cursor();
+            tft::write_pixel(icon_colour);
+        }
+    }
+    tft::end_write_pixel();
+}
+
+template <typename F>
 void write_glyph(
     const glyph::Glyph& glyph,
     uint16_t x_start, uint16_t y_start,
     rgb565_t text_colour, F background_colour_source
 ) {
     switch (glyph.encoding) {
-    case glyph::Encoding::BINARY_RLE_Q1: return write_glyph_binary_rle_q1<F>(glyph, x_start, y_start, text_colour, background_colour_source);
-    case glyph::Encoding::GRAYSCALE_RLE_Q4: return write_glyph_grayscale_rle_q4<F>(glyph, x_start, y_start, text_colour, background_colour_source);
-    case glyph::Encoding::BINARY_Q1: return write_glyph_binary_q1<F>(glyph, x_start, y_start, text_colour, background_colour_source);
-    case glyph::Encoding::GRAYSCALE_Q4: return write_glyph_grayscale_q4<F>(glyph, x_start, y_start, text_colour, background_colour_source);
+    case glyph::Encoding::BINARY_RLE_Q1: return write_glyph_binary_rle_q1(glyph, x_start, y_start, text_colour, background_colour_source);
+    case glyph::Encoding::GRAYSCALE_RLE_Q4: return write_glyph_grayscale_rle_q4(glyph, x_start, y_start, text_colour, background_colour_source);
+    case glyph::Encoding::BINARY_Q1: return write_glyph_binary_q1(glyph, x_start, y_start, text_colour, background_colour_source);
+    case glyph::Encoding::GRAYSCALE_Q4: return write_glyph_grayscale_q4(glyph, x_start, y_start, text_colour, background_colour_source);
+    case glyph::Encoding::RGBA_Q256_PALETTE: return write_glyph_rgba_q256_palette(glyph, x_start, y_start, text_colour, background_colour_source);
     default: break;
     }
 }
