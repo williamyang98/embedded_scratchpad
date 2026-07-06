@@ -4,6 +4,8 @@ import os
 import numpy as np
 import argparse
 import unicodedata
+from tabulate import tabulate, SEPARATING_LINE
+import humanize
 from image_compression import Encoding, encode_to_binary_running_length_encoded_u8, encode_to_grayscale_running_length_encoded_u4
 
 logger = logging.getLogger(__name__)
@@ -61,29 +63,56 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
         glyph_shapes.append((width, height))
         glyph_encodings.append(encoded_image)
 
-    total_bytes = sum((len(encoding) for encoding in glyph_encodings))
-    logger.info(f"font={namespace}, total_size={total_bytes} bytes, total_glyphs={len(glyphs)}")
+    table_headers = ["glyph", "width", "height", "original_size", "encoded_size", "ratio", "name"]
+    table_rows = []
 
     encoding_string = f"glyph::{encoding_to_cpp_string(encoding)}"
     data_declarations = []
     glyph_declarations = []
     switch_statement_cases = []
 
+    total_encoded_bytes = 0
+    total_original_bytes = 0
+
     for glyph, (width, height), encoding in zip(glyphs, glyph_shapes, glyph_encodings):
         glyph_name = unicodedata.name(glyph)
         glyph_name = glyph_name.lower().replace('-','_').replace(' ', '_')
-        logger.info(f"glyph='{glyph}', width={width}, height={height}, size_bytes={len(encoding)}, name={glyph_name}")
         data_body = ','.join((f"0x{value:02X}" for value in encoding))
-        if len(encoding) > 0:
+        encoded_size_bytes = len(encoding)
+        if encoded_size_bytes > 0:
             glyph_array_name = f"glyph_data_{glyph_name}"
-            data_declaration = f"static const uint8_t {glyph_array_name}[{len(encoding)}] PROGMEM = {{{ data_body }}};"
+            data_declaration = f"static const uint8_t {glyph_array_name}[{encoded_size_bytes}] PROGMEM = {{{ data_body }}};"
             data_declarations.append(data_declaration)
         else:
             glyph_array_name = "nullptr"
 
-        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, {glyph_array_name}, {len(encoding)}, {encoding_string} }};";
+        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, {glyph_array_name}, {encoded_size_bytes}, {encoding_string} }};";
         glyph_declarations.append(glyph_declaration)
         switch_statement_cases.append(f"case 0x{ord(glyph):02X}: return &glyph_{glyph_name};")
+
+        original_size_bytes = width*height*2/8 # 2bits per pixel
+        compression_ratio = encoded_size_bytes/original_size_bytes
+        table_rows.append([
+            glyph, width, height,
+            humanize.naturalsize(original_size_bytes),
+            humanize.naturalsize(encoded_size_bytes),
+            f"{compression_ratio:.02f}",
+            glyph_name,
+        ])
+
+        total_encoded_bytes += encoded_size_bytes
+        total_original_bytes += original_size_bytes
+
+    total_compression_ratio = total_encoded_bytes/total_original_bytes
+    table_rows.append(SEPARATING_LINE)
+    table_rows.append([
+        None, None, None,
+        humanize.naturalsize(total_original_bytes, format="%.3f"),
+        humanize.naturalsize(total_encoded_bytes, format="%.3f"),
+        f"{total_compression_ratio:.02f}",
+        None,
+    ])
+    print(tabulate(table_rows, table_headers, tablefmt="outline"))
 
     header = f"""#pragma once
 #include "./glyph.hpp"
@@ -144,8 +173,6 @@ def main():
     if namespace == None:
         namespace = formatted_namespace
 
-    logger.info(f"Using namespace={namespace}, encoding={args.encoding}, size={args.size}")
-
     with open(args.font, "rb") as fp:
         font = ImageFont.truetype(fp, args.size)
 
@@ -158,10 +185,11 @@ def main():
         if value == 1: continue
         logger.warn(f"Duplicate glyph '{key}' ignored with {value} instances")
     glyphs = sorted(glyphs.keys())
-    logger.info(f"Generating {len(glyphs)} glyphs")
+
+    print(f"Generating glyphs: total={len(glyphs)}, namespace={namespace}, encoding={args.encoding}, size={args.size}")
 
     header = create_font_cpp_header(namespace, font, glyphs, args.encoding)
-    logger.info(f"Writing header to {output}")
+    print(f"Writing c++ header to: {output}")
     with open(output, "w") as fp:
         fp.write(header)
 
