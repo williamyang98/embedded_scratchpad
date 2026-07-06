@@ -488,4 +488,11 @@ static void app_loop() {
         app.render_all();
         delay(1000);
     }
+    for (uint8_t i = 0; i <= 120; i+=1) {
+        const uint16_t hours = i / 60;
+        const uint16_t minutes = i - hours*60;
+        const uint16_t time = 1300 + minutes + 100*hours;
+        app.set_time(time);
+        app.render_all();
+    }
 }
