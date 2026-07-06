@@ -172,13 +172,13 @@ struct Digits {
     int16_t value;
     uint16_t absolute_value;
     static constexpr uint8_t TOTAL_DIGITS = 5;
-    uint8_t digits[5];
+    uint8_t digits[TOTAL_DIGITS];
     uint8_t leading_non_zero_digit_index;
     bool is_minus;
     Digits(int16_t _value) {
         value = _value;
         is_minus = value < 0;
-        absolute_value = value & ~(1 << 15);
+        absolute_value = is_minus ? -value : value;
         leading_non_zero_digit_index = 0;
         uint16_t counter = absolute_value;
         for (uint8_t i = 0; i < TOTAL_DIGITS; i++) {
