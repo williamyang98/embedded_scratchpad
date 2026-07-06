@@ -1,12 +1,11 @@
 #pragma once
 
 #include "./tft.hpp"
-#include "./font.hpp"
+#include "./printers.hpp"
 #include "./rgb565.hpp"
 #include "./colour_functions.hpp"
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
-#include <string.h>
 
 #ifdef TEST_HARNESS
 #include <format>
@@ -15,33 +14,6 @@
 #include <Arduino.h>
 #define log_frame(label)
 #endif
-
-struct Digits {
-    int16_t value;
-    uint16_t absolute_value;
-    static constexpr uint8_t TOTAL_DIGITS = 5;
-    uint8_t digits[5];
-    uint8_t leading_non_zero_digit_index;
-    bool is_minus;
-    Digits(int16_t _value) {
-        value = _value;
-        is_minus = value < 0;
-        absolute_value = value & ~(1 << 15);
-        leading_non_zero_digit_index = 0;
-        uint16_t counter = absolute_value;
-        for (uint8_t i = 0; i < TOTAL_DIGITS; i++) {
-            const uint8_t digit = counter % 10;
-            if (digit > 0) {
-                leading_non_zero_digit_index = i;
-            }
-            digits[i] = digit;
-            counter = (counter-digit) / 10;
-        }
-    }
-    uint8_t operator[](uint8_t i) const {
-        return digits[i];
-    }
-};
 
 class App {
 private:
