@@ -112,9 +112,9 @@ namespace {namespace} {{
 
 {'\n'.join(glyph_declarations)}
 
-static const uint16_t MAX_HEIGHT = {max_height};
-static const uint16_t MAX_WIDTH = {max_height};
-static const uint16_t TOTAL_GLYPHS = {len(glyphs)};
+static constexpr uint16_t MAX_HEIGHT = {max_height};
+static constexpr uint16_t MAX_WIDTH = {max_height};
+static constexpr uint16_t TOTAL_GLYPHS = {len(glyphs)};
 
 static const glyph::Glyph* get_glyph(uint8_t c) {{
     switch (c) {{

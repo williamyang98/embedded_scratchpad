@@ -309,10 +309,8 @@ private:
         auto& background_colour = get_background_colour();
         auto& printer = m_printers.weather_icon;
         printer.x_start = m_x_margin;
-        const auto* icon = weather_icons::get_icon(m_weather_icon_state);
-        if (icon != nullptr) {
-            printer.print_glyph(*icon, background_colour);
-        }
+        const auto& icon = weather_icons::get_icon(m_weather_icon_state);
+        printer.print_glyph(icon, background_colour);
         printer.cleanup_previous_prints(weather_icons::MAX_HEIGHT, background_colour);
     }
 
@@ -339,11 +337,9 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.weather_description;
         printer.x_start = m_x_margin;
-        const auto* icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
-        if (icon != nullptr) {
-            printer.print_glyph(*icon, background_colour);
-            printer.print_char(' ', background_colour, get_glyph);
-        }
+        const auto& icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
+        printer.print_glyph(icon, background_colour);
+        printer.print_char(' ', background_colour, get_glyph);
         const char* description = nullptr;
         if (m_temperature_celcius < 0) {
             description = "HEAVY SNOWSTORM";
@@ -372,19 +368,19 @@ private:
         const char* description = nullptr;
         if (m_humidity_percent < 100) {
             description = "DRY AIR";
-            icon = mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
+            icon = &mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
             icon_colour = COLOUR.YELLOW;
         } else if (m_humidity_percent < 300) {
             description = "MODERATE HUMIDITY";
-            icon = mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
+            icon = &mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
             icon_colour = COLOUR.RED;
         } else if (m_humidity_percent < 600) {
             description = "HEATSTROKE RISK";
-            icon = mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
+            icon = &mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
             icon_colour = COLOUR.RED;
         } else {
             description = "UNDERWATER";
-            icon = mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
+            icon = &mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
             icon_colour = COLOUR.GREEN;
         }
         if (icon != nullptr) {

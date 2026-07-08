@@ -74,6 +74,8 @@ class IconsFolder:
                 icon = Icon(image, name)
                 self.icons.append(icon)
 
+        assert len(self.icons) > 0, f"Folder: '{dirpath}' has no icons"
+
         self.max_width = max((icon.width for icon in self.icons))
         self.max_height = max((icon.height for icon in self.icons))
         self.total_bytes = sum((icon.total_bytes for icon in self.icons))
@@ -107,6 +109,7 @@ class IconsFolder:
 
     def get_cpp_string(self):
         icons_cpp = [IconCpp(icon) for icon in self.icons]
+        default_icon_cpp = icons_cpp[0]
         return \
 f"""namespace {self.namespace} {{
 
@@ -121,10 +124,10 @@ enum class Icon: uint8_t {{
 {'\n'.join((f"    {icon_cpp.enum_name}={index}," for index, icon_cpp in enumerate(icons_cpp)))}
 }};
 
-static const glyph::Glyph* get_icon(Icon icon) {{
+static const glyph::Glyph& get_icon(Icon icon) {{
     switch (icon) {{
-{'\n'.join((f"    case Icon::{icon_cpp.enum_name}: return &{icon_cpp.glyph_name};" for icon_cpp in icons_cpp))}
-    default: return nullptr;
+{'\n'.join((f"    case Icon::{icon_cpp.enum_name}: return {icon_cpp.glyph_name};" for icon_cpp in icons_cpp))}
+    default: return {default_icon_cpp.glyph_name};
     }}
 }}
 
