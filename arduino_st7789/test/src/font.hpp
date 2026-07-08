@@ -190,10 +190,13 @@ static void write_glyph_rgba_q256_palette(const glyph::Glyph& glyph, uint16_t x_
     const uint16_t total_pixels = static_cast<uint8_t>(width)*static_cast<uint8_t>(height);
     for (uint16_t i = 0; i < total_pixels; i++) {
         const uint8_t palette_index = pgm_read_byte(glyph.data + i);
-        if (palette_index == 255) {
+        if (palette_index == icons::TRANSPARENCY_PALETTE_VALUE) {
             const rgb565_t background_colour = background_colour_source.get_colour();
             background_colour_source.advance_cursor();
             tft::write_pixel(background_colour);
+        } else if (palette_index == icons::CHROMA_KEY_PALETTE_VALUE) {
+            background_colour_source.advance_cursor();
+            tft::write_pixel(text_colour);
         } else {
             const rgb565_t icon_colour = pgm_read_word(icons::RGB565_COLOUR_PALETTE + palette_index);
             background_colour_source.advance_cursor();

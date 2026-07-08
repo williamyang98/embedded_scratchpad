@@ -16,6 +16,9 @@
 #define log_frame(label)
 #endif
 
+namespace weather_icons = icons::large;
+namespace mini_icons = icons::small;
+
 class App {
 private:
     int16_t m_temperature_celcius;
@@ -56,6 +59,7 @@ private:
             weather_icon.text_colour = text_colour;
         }
     } m_printers;
+    rgb565_t m_text_colour;
     uint16_t m_x_margin;
     uint16_t m_y_margin;
     struct {
@@ -70,7 +74,7 @@ private:
         WARM = 2,
         HOT = 3,
     } m_background_state;
-    icons::Icon m_weather_icon_state;
+    weather_icons::Icon m_weather_icon_state;
     struct {
         bool background;
         bool time;
@@ -96,6 +100,7 @@ private:
 public:
     App() {
         m_render_mask.set_all(true);
+        m_text_colour = COLOUR.WHITE;
 
         m_temperature_celcius = 0;
         m_humidity_percent = 0;
@@ -113,7 +118,7 @@ public:
         m_background_colour.hot.background_colour = create_rgb565_u8(80, 30, 30);
         m_background_colour.hot.delta_colour = create_rgb565_bits(2,1,1);
         m_background_state = BackgroundState::FREEZING;
-        m_weather_icon_state = icons::Icon::SUNNY;
+        m_weather_icon_state = weather_icons::Icon::SUNNY;
 
         m_x_margin = 10;
         m_y_margin = 10;
@@ -135,7 +140,7 @@ public:
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
             m_printers.moon_description.y_end = y_text_end-1;
         }
-        m_printers.set_text_colour(COLOUR.WHITE);
+        m_printers.set_text_colour(m_text_colour);
         m_background_state = BackgroundState::FREEZING;
     }
 
@@ -228,21 +233,21 @@ private:
     }
 
     bool update_weather_icon_state() {
-        icons::Icon new_state = m_weather_icon_state;
+        weather_icons::Icon new_state = m_weather_icon_state;
         if (m_time_24_hour < 600) {
-            new_state = icons::Icon::FULL_MOON;
+            new_state = weather_icons::Icon::FULL_MOON;
         } else if (m_wind_kph > 300) {
-            new_state = icons::Icon::WIND;
+            new_state = weather_icons::Icon::WIND;
         } else if (m_humidity_percent > 400) {
-            new_state = icons::Icon::WET;
+            new_state = weather_icons::Icon::WET;
         } else if (m_temperature_celcius < 0)  {
-            new_state = icons::Icon::WINTER;
+            new_state = weather_icons::Icon::WINTER;
         } else if (m_temperature_celcius < 200) {
-            new_state = icons::Icon::PARTLY_CLOUDY;
+            new_state = weather_icons::Icon::PARTLY_CLOUDY;
         } else if (m_temperature_celcius < 300) {
-            new_state = icons::Icon::SPRING;
+            new_state = weather_icons::Icon::SPRING;
         } else {
-            new_state = icons::Icon::SUNNY;
+            new_state = weather_icons::Icon::SUNNY;
         }
         const bool is_changed = new_state != m_weather_icon_state;
         m_render_mask.weather_icon |= is_changed;
@@ -304,11 +309,11 @@ private:
         auto& background_colour = get_background_colour();
         auto& printer = m_printers.weather_icon;
         printer.x_start = m_x_margin;
-        const auto* icon = icons::get_icon(m_weather_icon_state);
+        const auto* icon = weather_icons::get_icon(m_weather_icon_state);
         if (icon != nullptr) {
             printer.print_glyph(*icon, background_colour);
         }
-        printer.cleanup_previous_prints(icons::MAX_HEIGHT, background_colour);
+        printer.cleanup_previous_prints(weather_icons::MAX_HEIGHT, background_colour);
     }
 
 
@@ -334,6 +339,11 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.weather_description;
         printer.x_start = m_x_margin;
+        const auto* icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
+        if (icon != nullptr) {
+            printer.print_glyph(*icon, background_colour);
+            printer.print_char(' ', background_colour, get_glyph);
+        }
         const char* description = nullptr;
         if (m_temperature_celcius < 0) {
             description = "HEAVY SNOWSTORM";
@@ -356,15 +366,32 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.humidity_description;
         printer.x_start = m_x_margin;
+
+        const glyph::Glyph* icon = nullptr;
+        rgb565_t icon_colour = COLOUR.RED;
         const char* description = nullptr;
         if (m_humidity_percent < 100) {
             description = "DRY AIR";
+            icon = mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
+            icon_colour = COLOUR.YELLOW;
         } else if (m_humidity_percent < 300) {
             description = "MODERATE HUMIDITY";
+            icon = mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
+            icon_colour = COLOUR.RED;
         } else if (m_humidity_percent < 600) {
             description = "HEATSTROKE RISK";
+            icon = mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
+            icon_colour = COLOUR.RED;
         } else {
             description = "UNDERWATER";
+            icon = mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
+            icon_colour = COLOUR.GREEN;
+        }
+        if (icon != nullptr) {
+            printer.text_colour = icon_colour;
+            printer.print_glyph(*icon, background_colour);
+            printer.text_colour = m_text_colour;
+            printer.print_char(' ', background_colour, get_glyph);
         }
         if (description != nullptr) {
             printer.print_string(description, background_colour, get_glyph);
