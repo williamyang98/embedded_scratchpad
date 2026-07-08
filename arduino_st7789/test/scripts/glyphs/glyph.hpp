@@ -1,12 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#ifdef TEST_HARNESS
-#define PROGMEM
-#else
-#include <avr/pgmspace.h>
-#endif
-
+#include "../../src/pgmspace.h"
 
 namespace glyph {
 

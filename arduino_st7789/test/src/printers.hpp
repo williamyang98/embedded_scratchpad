@@ -3,6 +3,8 @@
 #include "./rgb565.hpp"
 #include "./font.hpp"
 #include "./tft.hpp"
+#include "./pgmspace.h"
+#include "./Arduino.hpp"
 
 struct RightToLeftPrinter {
     uint16_t prev_x_end;
@@ -44,13 +46,18 @@ struct RightToLeftPrinter {
     }
 
     template <typename F, typename G>
-    void print_string(const char* str, F background_colour_source, G glyph_source) {
-        int16_t N = 0;
-        while (str[N] != 0) {
-            N++;
+    void print_string(const __FlashStringHelper* flash_str, F background_colour_source, G glyph_source) {
+        const char* str = reinterpret_cast<const char*>(flash_str);
+        uint8_t length = 0;
+        while (length < 255) {
+            const uint8_t c = pgm_read_byte(str + length);
+            if (c == 0) break;
+            length += 1;
         }
-        for (int16_t i = N-1; i >= 0; i--) {
-            print_char(str[i], background_colour_source, glyph_source);
+        while (length != 0) {
+            length--;
+            const uint8_t c = pgm_read_byte(str + length);
+            print_char(c, background_colour_source, glyph_source);
         }
     };
 
@@ -121,11 +128,12 @@ struct LeftToRightPrinter {
     }
 
     template <typename F, typename G>
-    void print_string(const char* str, F background_colour_source, G glyph_source) {
-        int16_t i = 0;
-        while (str[i] != 0) {
-            print_char(str[i], background_colour_source, glyph_source);
-            i++;
+    void print_string(const __FlashStringHelper* flash_str, F background_colour_source, G glyph_source) {
+        const char* str = reinterpret_cast<const char*>(flash_str);
+        for (uint8_t i = 0; i < 255; i++) {
+            const uint8_t c = pgm_read_byte(str + i);
+            if (c == 0) break;
+            print_char(c, background_colour_source, glyph_source);
         }
     };
 

@@ -7,13 +7,11 @@
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
 #include "../scripts/glyphs/icons.hpp"
+#include "./pgmspace.h"
+#include "./Arduino.hpp"
 
 #ifdef TEST_HARNESS
 #include <format>
-#include "./Arduino.hpp"
-#else
-#include <Arduino.h>
-#define log_frame(label)
 #endif
 
 namespace weather_icons = icons::large;
@@ -274,7 +272,7 @@ private:
         if (!m_time_display_settings.is_show_24_hour_time) {
             if (time >= 2400) time -= 2400;
             const bool is_pm = time >= 1200;
-            printer.print_string(is_pm ? "PM" : "AM", background_colour, get_glyph);
+            printer.print_string(is_pm ? F("PM") : F("AM"), background_colour, get_glyph);
             if (time >= 1300) time -= 1200; // 13:00 -> 1:00PM
         }
         const auto digits = Digits(time);
@@ -340,15 +338,15 @@ private:
         const auto& icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
         printer.print_glyph(icon, background_colour);
         printer.print_char(' ', background_colour, get_glyph);
-        const char* description = nullptr;
+        const __FlashStringHelper* description = nullptr;
         if (m_temperature_celcius < 0) {
-            description = "HEAVY SNOWSTORM";
+            description = F("HEAVY SNOWSTORM");
         } else if (m_temperature_celcius < 200) {
-            description = "STRONG OVERCAST";
+            description = F("STRONG OVERCAST");
         } else if (m_temperature_celcius < 300) {
-            description = "SUNNY";
+            description = F("SUNNY");
         } else {
-            description = "INTENSE HEATWAVE";
+            description = F("INTENSE HEATWAVE");
         }
         if (description != nullptr) {
             printer.print_string(description, background_colour, get_glyph);
@@ -365,21 +363,21 @@ private:
 
         const glyph::Glyph* icon = nullptr;
         rgb565_t icon_colour = COLOUR.RED;
-        const char* description = nullptr;
+        const __FlashStringHelper* description = nullptr;
         if (m_humidity_percent < 100) {
-            description = "DRY AIR";
+            description = F("DRY AIR");
             icon = &mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
             icon_colour = COLOUR.YELLOW;
         } else if (m_humidity_percent < 300) {
-            description = "MODERATE HUMIDITY";
+            description = F("MODERATE HUMIDITY");
             icon = &mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
             icon_colour = COLOUR.RED;
         } else if (m_humidity_percent < 600) {
-            description = "HEATSTROKE RISK";
+            description = F("HEATSTROKE RISK");
             icon = &mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
             icon_colour = COLOUR.RED;
         } else {
-            description = "UNDERWATER";
+            description = F("UNDERWATER");
             icon = &mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
             icon_colour = COLOUR.GREEN;
         }
@@ -401,7 +399,7 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.wind_description;
         printer.x_start = m_x_margin;
-        printer.print_string("WIND: ", background_colour, get_glyph);
+        printer.print_string(F("WIND: "), background_colour, get_glyph);
         const auto digits = Digits(m_wind_kph);
         int8_t leading_non_zero_digit_index = digits.leading_non_zero_digit_index;
         if (leading_non_zero_digit_index < 1) leading_non_zero_digit_index = 1;
@@ -410,7 +408,7 @@ private:
             if (i == 0) printer.print_char('.', background_colour, get_glyph);
             printer.print_char('0'+digit, background_colour, get_glyph);
         }
-        printer.print_string("KPH", background_colour, get_glyph);
+        printer.print_string(F("KPH"), background_colour, get_glyph);
         printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
@@ -420,7 +418,7 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.moon_description;
         printer.x_start = m_x_margin;
-        printer.print_string("MOON: HALF MOON", background_colour, get_glyph);
+        printer.print_string(F("MOON: HALF MOON"), background_colour, get_glyph);
         printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 };
@@ -428,7 +426,7 @@ private:
 
 static void app_setup() {
     Serial.begin(9600);
-    Serial.println("Starting up st7789 controller");
+    Serial.println(F("Starting up st7789 controller"));
     tft::init();
     tft::set_brightness(50);
 }

@@ -1,8 +1,10 @@
 #pragma once
 
+#ifdef TEST_HARNESS
 #include <stdint.h>
 #include <stdlib.h>
 #include "./st7789.hpp"
+#include "./pgmspace.h"
 
 extern FILE* fp_in;
 extern FILE* fp_out;
@@ -31,3 +33,12 @@ static void delay(unsigned long delay_ms) {
 static void log_frame(std::string label) {
     st7789->debug_out(fp_out, label);
 }
+
+// https://github.com/arduino/ArduinoCore-avr/blob/master/cores/arduino/WString.h#L37
+class __FlashStringHelper;
+#define F(string_literal) (reinterpret_cast<const __FlashStringHelper *>(PSTR(string_literal)))
+
+#else
+#define log_frame(label)
+#include <Arduino.h>
+#endif
