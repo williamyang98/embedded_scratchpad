@@ -15,10 +15,11 @@
 
 enum class ResponseHeader: uint8_t {
     ACKNOWLEDGE_COMMAND = 0x00,
-    LOG_MESSAGE = 0x01,
+    RENDER_STATUS = 0x01,
+    LOG_MESSAGE = 0x02,
 #ifdef TEST_HARNESS
-    DEBUG_MESSAGE = 0x02,
-    DEBUG_FRAME = 0x03,
+    DEBUG_MESSAGE = 0x03,
+    DEBUG_FRAME = 0x04,
 #endif
 };
 
@@ -34,6 +35,12 @@ public:
         m_decoded_buffer[1] = header;
         m_decoded_buffer[2] = is_success ? 0x01 : 0x00;
         const size_t encoded_size = cobs::encode(m_decoded_buffer, 3, m_encoded_buffer);
+        Serial.write(m_encoded_buffer, encoded_size);
+    }
+    void send_render_status(bool is_busy) {
+        m_decoded_buffer[0] = static_cast<uint8_t>(ResponseHeader::RENDER_STATUS);
+        m_decoded_buffer[1] = is_busy ? 0x01 : 0x00;
+        const size_t encoded_size = cobs::encode(m_decoded_buffer, 2, m_encoded_buffer);
         Serial.write(m_encoded_buffer, encoded_size);
     }
     void send_message(const FlashString* str) {

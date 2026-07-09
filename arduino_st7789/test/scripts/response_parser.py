@@ -4,9 +4,10 @@ from abc import ABC, abstractmethod
 # python receiver counterpart to ResponseHeader and ResponseSender in ../src/response.hpp
 class ResponseHeader:
     ACKNOWLEDGE_COMMAND = 0x00
-    LOG_MESSAGE = 0x01
-    DEBUG_MESSAGE = 0x02
-    DEBUG_FRAME = 0x03
+    RENDER_STATUS = 0x01
+    LOG_MESSAGE = 0x02
+    DEBUG_MESSAGE = 0x03
+    DEBUG_FRAME = 0x04
 
 class EmptyDecodedResponse(Exception):
     pass
@@ -29,6 +30,10 @@ class UnhandledResponse(Exception):
 class ResponseHandler(ABC):
     @abstractmethod
     def acknowledge_command(self, header, is_success):
+        pass
+
+    @abstractmethod
+    def render_status(self, is_busy):
         pass
 
     @abstractmethod
@@ -66,6 +71,10 @@ class ResponseParser:
             ack_header = data[1]
             is_success = data[2] != 0
             self.handler.acknowledge_command(ack_header, is_success)
+        elif header == ResponseHeader.RENDER_STATUS:
+            assert_length(2)
+            is_busy = data[1] != 0
+            self.handler.render_status(is_busy)
         elif header == ResponseHeader.LOG_MESSAGE:
             message = data[1:]
             message = message.decode("utf-8")

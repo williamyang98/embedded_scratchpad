@@ -6,7 +6,10 @@ import threading
 
 class CustomResponseHandler(ResponseHandler):
     def acknowledge_command(self, header, is_success):
-        print(f"> Acknowledged header={header:02X}, is_success={is_success}")
+        print(f"> Acknowledged received: header=0x{header:02X}, is_success={is_success}")
+
+    def render_status(self, is_busy):
+        print(f"> Render status: is_busy={is_busy}")
 
     def log_message(self, message):
         print(f"> Logged Message: {message}")

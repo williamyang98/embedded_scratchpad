@@ -139,6 +139,7 @@ public:
     }
 
     void render_all() {
+        response_sender.send_render_status(true);
         if (m_render_mask.background) {
             render_background();
             m_printers.reset();
@@ -153,6 +154,7 @@ public:
         if (m_render_mask.wind_description) render_wind_description();
         if (m_render_mask.moon_description) render_moon_description();
         m_render_mask.set_all(false);
+        response_sender.send_render_status(false);
         DEBUG_FRAME("render_all: temperature={0}°C, humidity={1}%", m_temperature_celcius, m_humidity_percent);
     }
 
