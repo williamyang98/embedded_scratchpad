@@ -7,7 +7,7 @@
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
 #include "../scripts/glyphs/icons.hpp"
-#include "./pgmspace.h"
+#include "./cobs.hpp"
 #include "./Arduino.hpp"
 
 #ifdef TEST_HARNESS
@@ -424,70 +424,3 @@ private:
 };
 
 
-static void app_setup() {
-    Serial.begin(9600);
-    Serial.println(F("Starting up st7789 controller"));
-    tft::init();
-    tft::set_brightness(50);
-}
-
-static App app;
-
-static void app_loop() {
-    app.set_time(1347);
-    app.set_time_show_24_hour(true);
-    app.set_time_show_leading_zero(true);
-    app.set_temperature(-110);
-    app.set_humidity(69);
-    app.set_wind(257);
-    app.render_all();
-    delay(1000);
-
-    app.set_time(1047);
-    app.set_time_show_24_hour(true);
-    app.set_time_show_leading_zero(true);
-    app.set_temperature(95);
-    app.set_humidity(215);
-    app.set_wind(57);
-    app.render_all();
-    delay(1000);
-
-    app.set_time(47);
-    app.set_time_show_24_hour(false);
-    app.set_time_show_leading_zero(false);
-    app.set_temperature(217);
-    app.set_humidity(419);
-    app.set_wind(0);
-    app.render_all();
-    delay(1000);
-
-    app.set_time(1547);
-    app.set_time_show_24_hour(false);
-    app.set_time_show_leading_zero(false);
-    app.set_temperature(328);
-    app.set_humidity(1000);
-    app.set_wind(1017);
-    app.render_all();
-    delay(1000);
-
-    constexpr uint8_t TOTAL_TIMES = 5;
-    const uint16_t TEST_TIMES[TOTAL_TIMES] = { 1000, 100, 1230, 1890, 111 };
-    for (uint8_t i = 0; i < TOTAL_TIMES; i++) {
-        const uint16_t time = TEST_TIMES[i];
-        app.set_time(time);
-        app.set_wind(217);
-        app.render_all();
-        delay(1000);
-    }
-    for (uint8_t i = 0; i <= 120; i+=1) {
-        const uint8_t j = i+45;
-        const uint16_t hours = j / 60;
-        const uint16_t minutes = j - hours*60;
-        const uint16_t time = 500 + minutes + 100*hours;
-        app.set_temperature(425-int16_t(i)*5);
-        app.set_wind(317-i);
-        app.set_humidity(600-uint16_t(i)*8);
-        app.set_time(time);
-        app.render_all();
-    }
-}

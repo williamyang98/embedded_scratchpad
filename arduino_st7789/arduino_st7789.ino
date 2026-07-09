@@ -1,9 +1,12 @@
-#include "./test/src/app.hpp"
+#include "./test/src/sketch.hpp"
+
+App app; // extern
+CommandParser command_parser(app); // extern
 
 void setup(void) {
-  app_setup();
+  sketch_setup();
 }
 
 void loop() {
-  app_loop();
+  sketch_loop();
 }

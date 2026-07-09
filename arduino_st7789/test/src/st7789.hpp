@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
-#include <memory>
 #include "./rgb565.hpp"
 
 class ST7789
@@ -124,5 +123,3 @@ public:
 
     void debug_out(FILE* fp, std::optional<std::string> label);
 };
-
-extern std::unique_ptr<ST7789> st7789;
