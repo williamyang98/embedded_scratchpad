@@ -1,5 +1,7 @@
 import argparse
-from command_creator import CommandSender, COBS_DELIMITER_BYTE
+import cobs
+from command_creator import CommandSender
+from response_parser import ResponseParser
 import threading
 
 def main():
@@ -37,18 +39,17 @@ def main():
     ser.open()
 
     writer = lambda data: ser.write(data)
-    sender = CommandSender(writer)
+    command_sender = CommandSender(writer)
+    response_parser = ResponseParser()
 
     def read_serial():
         while True:
             try:
-                data = ser.read_until(expected=bytes([COBS_DELIMITER_BYTE]))
+                data = ser.read_until(expected=bytes([cobs.DELIMITER_BYTE]))
             except Exception as ex:
                 print(f"Exiting reader thread: {ex}")
                 return
-            if len(data) == 0:
-                continue
-            print(f"> {data}")
+            response_parser.read_bytes(data)
 
     def write_serial():
         temperature = 100
@@ -63,18 +64,18 @@ def main():
                 return
 
             if c == "t":
-                sender.set_temperature(temperature)
+                command_sender.set_temperature(temperature)
                 temperature += 1
             elif c == "r":
-                sender.trigger_render()
+                command_sender.trigger_render()
             elif c == "h":
-                sender.set_humidity(humidity)
+                command_sender.set_humidity(humidity)
                 humidity += 1
             elif c == "T":
-                sender.set_24_hour_time(time, False, False)
+                command_sender.set_24_hour_time(time, False, False)
                 time += 1
             elif c == "w":
-                sender.set_wind_kph(wind)
+                command_sender.set_wind_kph(wind)
                 wind += 1
             elif c == "exit":
                 print("Exiting...")
