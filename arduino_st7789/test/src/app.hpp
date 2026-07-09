@@ -7,7 +7,6 @@
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
 #include "../scripts/glyphs/icons.hpp"
-#include "./cobs.hpp"
 #include "./Arduino.hpp"
 
 #ifdef TEST_HARNESS

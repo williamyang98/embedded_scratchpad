@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "./app.hpp"
+#include "./cobs.hpp"
 
 enum class CommandHeader: uint8_t {
     TRIGGER_RENDER = 0x00,
@@ -28,7 +29,7 @@ public:
         m_incoming_write_index++;
         if (m_incoming_write_index >= MAX_ENCODED_BYTES) m_incoming_write_index = 0;
         if (m_incoming_length < MAX_ENCODED_BYTES) m_incoming_length++; // write over existing data
-        if (c == COBS_DELIMITER_BYTE) read_cobs_frame();
+        if (c == cobs::DELIMITER_BYTE) read_cobs_frame();
     }
 private:
     void read_cobs_frame() {
@@ -43,13 +44,13 @@ private:
             read_index++;
             if (read_index >= MAX_ENCODED_BYTES) read_index = 0;
         }
-        const uint8_t decoded_length = cobs_decode(m_temp_buffer, m_incoming_length, m_decoded_buffer);
+        const size_t decoded_length = cobs::decode(m_temp_buffer, static_cast<size_t>(m_incoming_length), m_decoded_buffer);
         m_incoming_write_index = 0;
         m_incoming_length = 0;
         parse_command(m_decoded_buffer, decoded_length);
     }
 
-    void parse_command(const uint8_t* buffer, const uint8_t length) {
+    void parse_command(const uint8_t* buffer, const size_t length) {
         if (length == 0) return;
         const auto header = static_cast<CommandHeader>(buffer[0]);
         if (header == CommandHeader::TRIGGER_RENDER) {
@@ -176,7 +177,7 @@ private:
     template <size_t N>
     void send_packet(std::array<uint8_t, N> data_in) {
         std::array<uint8_t, N+2> data_out;
-        cobs_encode(data_in.data(), uint8_t(data_in.size()), data_out.data());
+        cobs::encode(data_in.data(), data_in.size(), data_out.data());
         m_pipe_in->write_block(data_out);
     }
 };

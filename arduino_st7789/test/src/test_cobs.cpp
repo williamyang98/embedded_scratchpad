@@ -54,13 +54,14 @@ struct TestCase {
 };
 
 static bool run_test_case(const std::string& label, std::span<const uint8_t> expected_src_buffer, std::span<const uint8_t> expected_dest_buffer) {
+    constexpr size_t MARGIN_SIZE = 256;
 
     bool is_passed = true;
     {
         std::vector<uint8_t> given_dest_buffer;
-        given_dest_buffer.resize(expected_dest_buffer.size());
-        const uint16_t given_dest_size = cobs_encode(
-            expected_src_buffer.data(), static_cast<uint8_t>(expected_src_buffer.size()),
+        given_dest_buffer.resize(expected_dest_buffer.size() + MARGIN_SIZE);
+        const size_t given_dest_size = cobs::encode(
+            expected_src_buffer.data(), expected_src_buffer.size(),
             given_dest_buffer.data()
         );
         is_passed &= test_compare_array(
@@ -70,9 +71,9 @@ static bool run_test_case(const std::string& label, std::span<const uint8_t> exp
     }
     {
         std::vector<uint8_t> given_src_buffer;
-        given_src_buffer.resize(expected_src_buffer.size());
-        const uint16_t given_src_size = cobs_decode(
-            expected_dest_buffer.data(), static_cast<uint16_t>(expected_dest_buffer.size()),
+        given_src_buffer.resize(expected_src_buffer.size() + MARGIN_SIZE);
+        const size_t given_src_size = cobs::decode(
+            expected_dest_buffer.data(), expected_dest_buffer.size(),
             given_src_buffer.data()
         );
         is_passed &= test_compare_array(
@@ -119,15 +120,88 @@ int main(int argc, char** argv) {
     {
         std::vector<uint8_t> src;
         std::vector<uint8_t> dest;
-        for (size_t i = 1; i <= 254; i++) {
+        for (size_t i = 0x01; i <= 0xFE; i++) {
             src.push_back(static_cast<uint8_t>(i));
         }
+
         dest.push_back(0xFF);
-        for (size_t i = 1; i <= 254; i++) {
+        for (size_t i = 0x01; i <= 0xFE; i++) {
             dest.push_back(static_cast<uint8_t>(i));
         }
         dest.push_back(0x00);
+
         counter += run_test_case("Example 7", src, dest);
+    }
+    {
+        std::vector<uint8_t> src;
+        std::vector<uint8_t> dest;
+        for (size_t i = 0x00; i <= 0xFE; i++) {
+            src.push_back(static_cast<uint8_t>(i));
+        }
+
+        dest.push_back(0x01);
+        dest.push_back(0xFF);
+        for (size_t i = 0x01; i <= 0xFE; i++) {
+            dest.push_back(static_cast<uint8_t>(i));
+        }
+        dest.push_back(0x00);
+
+        counter += run_test_case("Example 8", src, dest);
+    }
+    {
+        std::vector<uint8_t> src;
+        std::vector<uint8_t> dest;
+        for (size_t i = 0x01; i <= 0xFF; i++) {
+            src.push_back(static_cast<uint8_t>(i));
+        }
+
+        dest.push_back(0xFF);
+        for (size_t i = 0x01; i <= 0xFE; i++) {
+            dest.push_back(static_cast<uint8_t>(i));
+        }
+        dest.push_back(0x02);
+        dest.push_back(0xFF);
+        dest.push_back(0x00);
+
+        counter += run_test_case("Example 9", src, dest);
+    }
+    {
+        std::vector<uint8_t> src;
+        std::vector<uint8_t> dest;
+        for (size_t i = 0x02; i <= 0xFF; i++) {
+            src.push_back(static_cast<uint8_t>(i));
+        }
+        src.push_back(0x00);
+
+        dest.push_back(0xFF);
+        for (size_t i = 0x02; i <= 0xFF; i++) {
+            dest.push_back(static_cast<uint8_t>(i));
+        }
+        dest.push_back(0x01);
+        dest.push_back(0x01);
+        dest.push_back(0x00);
+
+        counter += run_test_case("Example 10", src, dest);
+    }
+    {
+        std::vector<uint8_t> src;
+        std::vector<uint8_t> dest;
+        for (size_t i = 0x03; i <= 0xFF; i++) {
+            src.push_back(static_cast<uint8_t>(i));
+        }
+        for (size_t i = 0x00; i <= 0x01; i++) {
+            src.push_back(static_cast<uint8_t>(i));
+        }
+
+        dest.push_back(0xFE);
+        for (size_t i = 0x03; i <= 0xFF; i++) {
+            dest.push_back(static_cast<uint8_t>(i));
+        }
+        dest.push_back(0x02);
+        dest.push_back(0x01);
+        dest.push_back(0x00);
+
+        counter += run_test_case("Example 11", src, dest);
     }
     {
         std::vector<uint8_t> src;
@@ -142,6 +216,7 @@ int main(int argc, char** argv) {
             dest.push_back(static_cast<uint8_t>(i));
         }
         dest.push_back(0x00);
+
         counter += run_test_case("Example A1", src, dest);
     }
     {
