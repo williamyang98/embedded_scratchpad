@@ -31,10 +31,14 @@ struct HardwareSerial {
         return static_cast<uint8_t>(c);
     }
     size_t write(uint8_t c) {
-        return fwrite(&c, sizeof(uint8_t), 1, m_fp_out);
+        const size_t total_written = fwrite(&c, sizeof(uint8_t), 1, m_fp_out);
+        fflush(m_fp_out);
+        return total_written;
     }
     size_t write(const uint8_t* buffer, size_t size) {
-        return fwrite(buffer, sizeof(uint8_t), size, m_fp_out);
+        const size_t total_written = fwrite(buffer, sizeof(uint8_t), size, m_fp_out);
+        fflush(m_fp_out);
+        return total_written;
     }
     void end() {
         fclose(m_fp_in);
