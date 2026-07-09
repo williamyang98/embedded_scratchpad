@@ -1,6 +1,6 @@
 import cobs
 
-# python counterpart to CommandHeader and CommandSender in ../src/commands.hpp
+# python transmitter counterpart to CommandHeader and CommandParser in ../src/commands.hpp
 class CommandHeader:
     TRIGGER_RENDER = 0x00
     SET_TEMPERATURE = 0x01
@@ -65,7 +65,6 @@ class CommandSender:
         return self.write(self.creator.set_wind_kph(wind_kph))
 
     def write(self, data):
-        print(f"< {data}")
         return self.writer(data)
 
 

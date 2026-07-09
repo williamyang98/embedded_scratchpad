@@ -1,8 +1,21 @@
 import argparse
 import cobs
 from command_creator import CommandSender
-from response_parser import ResponseParser
+from response_parser import ResponseParser, ResponseHandler
 import threading
+
+class CustomResponseHandler(ResponseHandler):
+    def acknowledge_command(self, header, is_success):
+        print(f"> Acknowledged header={header:02X}, is_success={is_success}")
+
+    def log_message(self, message):
+        print(f"> Logged Message: {message}")
+
+    def debug_message(self, message):
+        print(f"> Debug Message: {message}")
+
+    def debug_frame(self, frame):
+        pass
 
 def main():
     parser = argparse.ArgumentParser()
@@ -40,7 +53,8 @@ def main():
 
     writer = lambda data: ser.write(data)
     command_sender = CommandSender(writer)
-    response_parser = ResponseParser()
+    response_handler = CustomResponseHandler()
+    response_parser = ResponseParser(response_handler)
 
     def read_serial():
         while True:
@@ -49,7 +63,10 @@ def main():
             except Exception as ex:
                 print(f"Exiting reader thread: {ex}")
                 return
-            response_parser.read_bytes(data)
+            try:
+                response_parser.read_encoded_bytes(data)
+            except Exception as ex:
+                print(f"Error while reading serial: {ex}")
 
     def write_serial():
         temperature = 100
