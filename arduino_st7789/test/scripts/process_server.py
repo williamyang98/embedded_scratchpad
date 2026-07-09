@@ -1,8 +1,7 @@
 import argparse
 import cobs
-from command_creator import CommandSender
-from response_parser import ResponseParser, ResponseHandler
-import threading
+from response_parser import ResponseHandler
+from devices import ProcessDevice
 import subprocess
 import sys
 import os
@@ -43,38 +42,9 @@ def main():
         print(f"[ERROR]: Failed to launch process: {ex}")
         return 1
 
-    def writer(data):
-        proc.stdin.write(data)
-        proc.stdin.flush()
-
-    command_sender = CommandSender(writer)
     response_handler = CustomResponseHandler()
-    response_parser = ResponseParser(response_handler)
-
-    def read_serial():
-        while True:
-            buffer = []
-            while True:
-                try:
-                    res = proc.stdout.read(1)
-                except Exception as ex:
-                    print(f"Exiting reader thread: {ex}")
-                    return
-                if res == None:
-                    print("Exiting since stdout closed in reader thread")
-                    return
-                if len(res) == 0:
-                    print(f"Exiting since stdout did not receive a byte")
-                    return
-                c = res[0]
-                buffer.append(c)
-                if c == cobs.DELIMITER_BYTE:
-                    break
-            buffer = bytearray(buffer)
-            try:
-                response_parser.read_encoded_bytes(buffer)
-            except Exception as ex:
-                print(f"Error while reading serial: {ex}")
+    device = ProcessDevice(proc, response_handler)
+    command_sender = device.get_command_sender()
 
     def write_serial():
         temperature = 100
@@ -108,10 +78,8 @@ def main():
             else:
                 print(f"Unknown command: {c}")
 
-    read_thread = threading.Thread(target=read_serial)
-    read_thread.start()
     write_serial()
-    proc.stdin.close()
+    device.wait()
 
 if __name__ == "__main__":
     rv = main()
