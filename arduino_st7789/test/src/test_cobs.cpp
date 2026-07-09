@@ -54,12 +54,10 @@ struct TestCase {
 };
 
 static bool run_test_case(const std::string& label, std::span<const uint8_t> expected_src_buffer, std::span<const uint8_t> expected_dest_buffer) {
-    constexpr size_t MARGIN_SIZE = 256;
-
     bool is_passed = true;
     {
         std::vector<uint8_t> given_dest_buffer;
-        given_dest_buffer.resize(expected_dest_buffer.size() + MARGIN_SIZE);
+        given_dest_buffer.resize(cobs::get_maximum_encoded_size(expected_src_buffer.size()));
         const size_t given_dest_size = cobs::encode(
             expected_src_buffer.data(), expected_src_buffer.size(),
             given_dest_buffer.data()
@@ -71,7 +69,7 @@ static bool run_test_case(const std::string& label, std::span<const uint8_t> exp
     }
     {
         std::vector<uint8_t> given_src_buffer;
-        given_src_buffer.resize(expected_src_buffer.size() + MARGIN_SIZE);
+        given_src_buffer.resize(cobs::get_maximum_decoded_size(expected_dest_buffer.size()));
         const size_t given_src_size = cobs::decode(
             expected_dest_buffer.data(), expected_dest_buffer.size(),
             given_src_buffer.data()

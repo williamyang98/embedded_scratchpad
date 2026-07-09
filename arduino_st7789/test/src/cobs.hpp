@@ -9,6 +9,18 @@ namespace cobs {
 static constexpr uint8_t DELIMITER_BYTE = 0x00;
 static constexpr uint8_t MAX_CODE_OFFSET = 255;
 
+static size_t get_maximum_encoded_size(size_t decoded_size) {
+    // Ceiling divison: ⌈n/254⌉
+    const size_t total_overhead_bytes = (decoded_size+254-1)/254 + 1; // include delimiter
+    return total_overhead_bytes + decoded_size;
+}
+
+static size_t get_maximum_decoded_size(size_t encoded_size) {
+    constexpr size_t minimum_overhead_bytes = 2; // starting and delimiter
+    if (encoded_size <= minimum_overhead_bytes) return 0;
+    return encoded_size-minimum_overhead_bytes;
+}
+
 static size_t encode(const void* src_data, size_t src_length_bytes, uint8_t* dest_buffer) {
     const uint8_t* src_buffer = reinterpret_cast<const uint8_t*>(src_data);
 
