@@ -4,6 +4,9 @@ from command_creator import CommandSender
 from response_parser import ResponseParser, ResponseHandler
 import threading
 from typing import override
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Device(ABC):
     def __init__(self, response_handler: ResponseHandler):
@@ -45,13 +48,13 @@ class ProcessDevice(Device):
                 try:
                     res = self.process.stdout.read(1)
                 except Exception as ex:
-                    print(f"Exiting reader thread: {ex}")
+                    logger.info(f"Exiting reader thread: {ex}")
                     return
                 if res == None:
-                    print("Exiting since stdout closed in reader thread")
+                    logger.info("Exiting since stdout closed in reader thread")
                     return
                 if len(res) == 0:
-                    print(f"Exiting since stdout did not receive a byte")
+                    logger.info(f"Exiting since stdout did not receive a byte")
                     return
                 c = res[0]
                 buffer.append(c)
@@ -61,7 +64,7 @@ class ProcessDevice(Device):
             try:
                 self.response_parser.read_encoded_bytes(buffer)
             except Exception as ex:
-                print(f"Error while reading serial: {ex}")
+                logger.error(f"Error while reading serial: {ex}")
 
     @override
     def wait(self, force=False):
@@ -90,12 +93,12 @@ class SerialDevice(Device):
             try:
                 data = self.serial.read_until(expected=bytes([cobs.DELIMITER_BYTE]))
             except Exception as ex:
-                print(f"Exiting reader thread: {ex}")
+                logger.info(f"Exiting reader thread: {ex}")
                 return
             try:
                 self.response_parser.read_encoded_bytes(data)
             except Exception as ex:
-                print(f"Error while reading serial: {ex}")
+                logger.error(f"Error while reading serial: {ex}")
 
     @override
     def wait(self, force=False):

@@ -1,4 +1,7 @@
 import struct
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FrameBodyTooShort(Exception):
     def __init__(self, minimum_length, data, part):
@@ -37,10 +40,11 @@ class Frame:
         if len(data) < total_pixel_bytes:
             raise FrameBodyTooShort(total_pixel_bytes, data, "PIXEL_DATA")
         pixel_data = data[:total_pixel_bytes]
+        pixel_data = memoryview(pixel_data).cast("H")
 
         data = data[total_pixel_bytes:]
         if len(data) != 0:
-            print(f"[WARNING]: Got {len(data)} extra bytes in frame body")
+            logger.warning(f"Got {len(data)} extra unhandled bytes in frame body")
 
         self.x_start = x_start
         self.x_end = x_end
