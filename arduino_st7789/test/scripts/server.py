@@ -24,13 +24,13 @@ class CustomResponseHandler(ResponseHandler):
         future = asyncio.run_coroutine_threadsafe(coro, self.event_loop)
         self.sent_message_futures.append(future)
 
-    async def wait_messages(self):
+    async def wait_messages_sent(self):
         for concurrent_future in self.sent_message_futures:
             try:
                 async_future = asyncio.wrap_future(concurrent_future)
                 await async_future
             except Exception as ex:
-                logger.error(f"Failed to sent message: {ex}")
+                logger.error(f"Failed to send message: {ex}")
 
     def send_json(self, data: dict):
         if self.websocket.closed: return
@@ -109,8 +109,17 @@ class App:
         device = ProcessDevice(process, response_handler)
         command_sender = device.get_command_sender()
 
+        temperature = 100
+        async for message in websocket:
+            logger.info(f"Got message from websocket: {message}")
+            def action():
+                command_sender.set_temperature(temperature)
+                command_sender.trigger_render()
+            await run_blocking(event_loop, action)
+            temperature += 11
+
         await run_blocking(event_loop, lambda: device.wait())
-        await response_handler.wait_messages()
+        await response_handler.wait_messages_sent()
 
     async def on_cleanup(self, web_app):
         logger.info("Cleaning up")

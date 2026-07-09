@@ -6,7 +6,11 @@ const frame_elem = useTemplateRef("frame");
 const frames = ref([]);
 const selected_frame_index = ref(0);
 const selected_frame = computed(() => frames.value[selected_frame_index.value]);
+
+const websocket = ref(null);
 const is_running = ref(false);
+const can_send_commands = computed(() => websocket.value !== null);
+
 const is_pin_frame = ref(false);
 const frame_scale = ref(1.0);
 
@@ -21,11 +25,11 @@ function launch_process() {
 
   let previous_frame_header = null;
   try {
-    const websocket = new WebSocket(websocket_url);
-    websocket.addEventListener("open", () => {
+    websocket.value = new WebSocket(websocket_url);
+    websocket.value.addEventListener("open", () => {
       is_running.value = true;
     });
-    websocket.addEventListener("message", (event) => {
+    websocket.value.addEventListener("message", (event) => {
       if (typeof event.data === "string") {
         previous_frame_header = JSON.parse(event.data);
       } else {
@@ -41,12 +45,24 @@ function launch_process() {
           });
       }
     });
-    websocket.addEventListener("close", (event) => {
+    websocket.value.addEventListener("close", (event) => {
       is_running.value = false;
+      websocket.value = null;
     });
   } catch {
     is_running.value = false;
+    websocket.value = null;
   }
+}
+
+function end_process() {
+    if (websocket.value === null) return;
+    websocket.value.close();
+}
+
+function update_temperature() {
+    if (websocket.value === null) return;
+    websocket.value.send("Hi there");
 }
 
 onMounted(() => {
@@ -65,6 +81,8 @@ watch(selected_frame, (selected_frame) => {
 
 <template>
 <button @click="launch_process" :disabled="is_running">Run</button>
+<button @click="end_process" :disabled="!can_send_commands">End</button>
+<button @click="update_temperature" :disabled="!can_send_commands">Update Temperature</button>
 <div>
   <label>Pin frame</label>
   <input type="checkbox" v-model.boolean="is_pin_frame"/>
