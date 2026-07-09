@@ -1,5 +1,7 @@
 import cobs
+from frame import Frame
 from abc import ABC, abstractmethod
+import struct
 
 # python receiver counterpart to ResponseHeader and ResponseSender in ../src/response.hpp
 class ResponseHeader:
@@ -29,23 +31,23 @@ class UnhandledResponse(Exception):
 
 class ResponseHandler(ABC):
     @abstractmethod
-    def acknowledge_command(self, header, is_success):
+    def acknowledge_command(self, header: int, is_success: bool):
         pass
 
     @abstractmethod
-    def render_status(self, is_busy):
+    def render_status(self, is_busy: bool):
         pass
 
     @abstractmethod
-    def log_message(self, message):
+    def log_message(self, message: str):
         pass
 
     @abstractmethod
-    def debug_message(self, message):
+    def debug_message(self, message: str):
         pass
 
     @abstractmethod
-    def debug_frame(self, frame):
+    def debug_frame(self, frame: Frame):
         pass
 
 class ResponseParser:
@@ -84,7 +86,8 @@ class ResponseParser:
             message = message.decode("utf-8")
             self.handler.debug_message(message)
         elif header == ResponseHeader.DEBUG_FRAME:
-            frame = data[1:]
+            frame_data = data[1:]
+            frame = Frame(frame_data)
             self.handler.debug_frame(frame)
         else:
             raise UnhandledResponse(header, data)
