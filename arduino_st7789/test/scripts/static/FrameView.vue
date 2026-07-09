@@ -18,7 +18,7 @@ watch(canvas, (canvas) => {
 function update_image(rgb565_data, width, height) {
   const total_pixels = width*height;
   if (total_pixels != rgb565_data.length) {
-    throw Error(`Total number of pixels ${rgb565_data} in rgb565 data doesn't match resolution width=${width}, height=${height}, total_pixels=${total_pixels}`);
+    throw Error(`Total number of pixels ${rgb565_data.length} in rgb565 data doesn't match resolution width=${width}, height=${height}, total_pixels=${total_pixels}`);
   }
 
   if (canvas.value === null) return;

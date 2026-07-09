@@ -4,11 +4,23 @@ import logging
 import os
 import sys
 import threading
-from aiohttp import web
+import json
+from aiohttp import web, WSMsgType
 from devices import Device, ProcessDevice, SerialDevice
 from response_parser import ResponseHandler
 
 logger = logging.getLogger(__name__)
+
+async def run_blocking(event_loop, callback):
+    future = event_loop.create_future()
+    def thread_runner():
+        result = callback()
+        event_loop.call_soon_threadsafe(future.set_result, result)
+    thread = threading.Thread(target=thread_runner)
+    thread.start()
+    result = await future
+    thread.join()
+    return result
 
 class CustomResponseHandler(ResponseHandler):
     def __init__(self, websocket, event_loop):
@@ -37,46 +49,90 @@ class CustomResponseHandler(ResponseHandler):
         self.run_coroutine(self.websocket.send_bytes(data))
 
     def acknowledge_command(self, header, is_success):
-        logger.info(f"> Acknowledged received: header=0x{header:02X}, is_success={is_success}")
+        self.send_json({
+            "type": "acknowledge_command",
+            "header": header,
+            "is_success": is_success,
+        })
 
     def render_status(self, is_busy):
-        logger.info(f"> Render status: is_busy={is_busy}")
+        self.send_json({
+            "type": "render_status",
+            "is_busy": is_busy,
+        })
 
     def log_message(self, message):
-        logger.info(f"> Logged Message: {message}")
+        self.send_json({
+            "type": "log_message",
+            "message": message,
+        })
 
     def debug_message(self, message):
-        logger.info(f"> Debug Message: {message}")
+        self.send_json({
+            "type": "debug_message",
+            "message": message,
+        })
 
     def debug_frame(self, frame):
-        logger.info(f"> Frame: width={frame.width}, height={frame.height}, label='{frame.label}'")
-        data = {
+        self.send_json({
+            "type": "debug_frame",
             "x_start": frame.x_start,
             "x_end": frame.x_end,
             "y_start": frame.y_start,
             "y_end": frame.y_end,
-            "image_width": frame.width,
-            "image_height": frame.height,
+            "width": frame.width,
+            "height": frame.height,
             "x_cursor": frame.x_cursor,
             "y_cursor": frame.y_cursor,
-            "time_nanos": 0,
             "brightness": frame.brightness,
             "hardware_reset": frame.hardware_reset,
             "label": frame.label,
-        }
-        self.send_json(data)
+        })
         self.send_data(frame.pixel_data)
 
-async def run_blocking(event_loop, callback):
-    future = event_loop.create_future()
-    def thread_runner():
-        result = callback()
-        event_loop.call_soon_threadsafe(future.set_result, result)
-    thread = threading.Thread(target=thread_runner)
-    thread.start()
-    result = await future
-    thread.join()
-    return result
+class CommandParser:
+    def __init__(self, event_loop, command_sender):
+        self.event_loop = event_loop
+        self.command_sender = command_sender
+
+    async def read_command(self, command):
+        try:
+            command = json.loads(command)
+        except Exception as ex:
+            logger.error(f"Failed to parse command: {command}")
+            return
+
+        def get_field(field, _type):
+            value = command.get(field)
+            if value == None:
+                raise Exception(f"Command missing field '{field}'")
+            if not isinstance(value, _type):
+                raise Exception(f"Command field '{field}' expected type '{_type}' but got wrong type '{type(value)}'")
+            return value
+
+        try:
+            _type = get_field("type", str)
+            if _type == "trigger_render":
+                await run_blocking(self.event_loop, lambda: self.command_sender.trigger_render())
+            elif _type == "set_temperature":
+                temperature = get_field("temperature", int)
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_temperature(temperature))
+            elif _type == "set_humidity":
+                humidity = get_field("humidity", int)
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_humidity(humidity))
+            elif _type == "set_time_24_hour":
+                time_24_hour = get_field("time_24_hour", int)
+                show_24_hour = get_field("show_24_hour", int)
+                show_leading_zeros = get_field("show_leading_zeros", int)
+                runner = lambda: self.command_sender.set_24_hour_time(time_24_hour, show_24_hour, show_leading_zeros)
+                await run_blocking(self.event_loop, runner)
+            elif _type == "set_wind_kph":
+                wind_kph = get_field("wind_kph", int)
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_wind_kph(wind_kph))
+            else:
+                logger.error(f"Unhandled command type={_type}, command={command}")
+        except Exception as ex:
+            logger.error(ex)
 
 class App:
     def __init__(self, create_device):
@@ -94,17 +150,16 @@ class App:
         response_handler = CustomResponseHandler(websocket, event_loop)
         device = await run_blocking(event_loop, lambda: self.create_device(response_handler))
         if device == None:
+            logger.error("Failed to create device")
             return
         command_sender = device.get_command_sender()
+        command_parser = CommandParser(event_loop, command_sender)
 
-        temperature = 100
         async for message in websocket:
-            logger.info(f"Got message from websocket: {message}")
-            def action():
-                command_sender.set_temperature(temperature)
-                command_sender.trigger_render()
-            await run_blocking(event_loop, action)
-            temperature += 11
+            if message.type == WSMsgType.TEXT:
+                await command_parser.read_command(message.data)
+            elif message.type == WSMsgType.CLOSE:
+                break
 
         await run_blocking(event_loop, lambda: device.wait())
         await response_handler.wait_messages_sent()
