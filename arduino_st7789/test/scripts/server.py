@@ -2,14 +2,10 @@ import argparse
 import asyncio
 import logging
 import os
-import struct
-import subprocess
 import sys
 import threading
-import time
 from aiohttp import web
-
-from devices import Device, ProcessDevice
+from devices import Device, ProcessDevice, SerialDevice
 from response_parser import ResponseHandler
 
 logger = logging.getLogger(__name__)
@@ -83,8 +79,8 @@ async def run_blocking(event_loop, callback):
     return result
 
 class App:
-    def __init__(self, exec_filepath):
-        self.exec_filepath = exec_filepath
+    def __init__(self, create_device):
+        self.create_device = create_device
 
     async def websocket_handler(self, request):
         websocket = web.WebSocketResponse()
@@ -93,20 +89,12 @@ class App:
         return websocket
 
     async def launch_process(self, websocket):
-        try:
-            process = subprocess.Popen(
-                [self.exec_filepath],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-        except FileNotFoundError as ex:
-            logging.error(f"Failed to launch process: {ex}")
-            return
-
         event_loop = asyncio.get_running_loop()
+
         response_handler = CustomResponseHandler(websocket, event_loop)
-        device = ProcessDevice(process, response_handler)
+        device = await run_blocking(event_loop, lambda: self.create_device(response_handler))
+        if device == None:
+            return
         command_sender = device.get_command_sender()
 
         temperature = 100
@@ -123,29 +111,82 @@ class App:
 
     async def on_cleanup(self, web_app):
         logger.info("Cleaning up")
-        pass
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("executable", nargs="?", default="../build/st7789.exe")
+    parser.add_argument("mode", nargs="?", choices=["process", "serial"], default="process")
+    parser.add_argument("--executable", default="../build/st7789.exe")
+    parser.add_argument("--port", default=None, type=str, help="COM port to connect to")
+    parser.add_argument("--baudrate", default=9600, type=int, help="Rate to communicate with device")
+    parser.add_argument("--list-ports", action="store_true", help="List all COM ports connected to computer")
+    parser.add_argument("--reset", action="store_true", help="Reset arduino on connection")
     parser.add_argument("--static-dirpath", default="./static")
     args = parser.parse_args()
 
     log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
     logging.basicConfig(level=log_level)
 
-    if not os.path.isfile(args.executable):
-        logger.error(f"'{args.executable}' is not a valid executable")
-        return 1
+    if args.list_ports:
+        import serial.tools.list_ports
+        ports = serial.tools.list_ports.comports()
+        if len(ports) == 0:
+            logger.error("No ports are available to list")
+            return 1
+        for port in ports:
+            print(port.device)
+        return 0
 
     if not os.path.isdir(args.static_dirpath):
         logger.error(f"'{args.static_dirpath}' is not a valid static directory path")
         return 1
-
-    exec_filepath = os.path.abspath(args.executable)
     static_dirpath = args.static_dirpath
 
-    app = App(exec_filepath)
+    if args.mode == "process":
+        exec_filepath = os.path.abspath(args.executable)
+        if not os.path.isfile(args.executable):
+            logger.error(f"'{args.executable}' is not a valid executable")
+            return 1
+        import subprocess
+        def create_device(response_handler):
+            try:
+                process = subprocess.Popen(
+                    [exec_filepath],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except FileNotFoundError as ex:
+                logging.error(f"Failed to launch process: {ex}")
+                return None
+            device = ProcessDevice(process, response_handler)
+            return device
+    elif args.mode == "serial":
+        port_name = args.port
+        if port_name is None:
+            import serial.tools.list_ports
+            ports = serial.tools.list_ports.comports()
+            if len(ports) == 0:
+                logger.error("No ports available to choose by default")
+                return 1
+            port = ports[0]
+            logger.info(f"Choosing port '{port.device}' by default")
+            port_name = port.device
+
+        import serial
+        def create_device(response_handler):
+            ser = serial.Serial()
+            ser.port = port_name
+            ser.baudrate = args.baudrate
+            ser.dtr = args.reset
+            ser.open()
+
+            device = SerialDevice(ser, response_handler)
+            return device
+    else:
+        logger.error(f"Unknown device mode: {args.mode}")
+        return 1
+
+    app = App(create_device)
     web_app = web.Application()
     web_app.on_cleanup.append(app.on_cleanup)
     web_app.router.add_get("/", lambda request: web.HTTPFound("/index.html"))
