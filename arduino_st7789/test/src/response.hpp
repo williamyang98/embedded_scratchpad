@@ -93,7 +93,7 @@ private:
     void push_large_array(std::span<const uint8_t> buf) {
         const size_t N = buf.size();
         for (size_t i = 0; i < N; i++) {
-            m_large_encoded_buffer.push_back(buf[i]);
+            m_large_decoded_buffer.push_back(buf[i]);
         }
     }
 public:
@@ -112,7 +112,7 @@ public:
         const size_t max_encoded_size = cobs::get_maximum_encoded_size(decoded_size);
         m_large_encoded_buffer.resize(max_encoded_size);
         const size_t encoded_size = cobs::encode(m_large_decoded_buffer.data(), decoded_size, m_large_encoded_buffer.data());
-        Serial.write(m_encoded_buffer, encoded_size);
+        Serial.write(m_large_encoded_buffer.data(), encoded_size);
     }
     template <class... T>
     void debug_frame(const std::format_string<T...> fmt, T&&... args) {
@@ -149,7 +149,7 @@ public:
         const size_t max_encoded_size = cobs::get_maximum_encoded_size(decoded_size);
         m_large_encoded_buffer.resize(max_encoded_size);
         const size_t encoded_size = cobs::encode(m_large_decoded_buffer.data(), decoded_size, m_large_encoded_buffer.data());
-        Serial.write(m_encoded_buffer, encoded_size);
+        Serial.write(m_large_encoded_buffer.data(), encoded_size);
     }
 #endif
 };
