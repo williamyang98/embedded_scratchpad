@@ -1,12 +1,11 @@
 import argparse
-from command_creator import CommandSender
+from command_creator import CommandSender, COBS_DELIMITER_BYTE
 import threading
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", default=None, type=str, help="COM port to connect to")
     parser.add_argument("--baudrate", default=9600, type=int, help="Rate to communicate with device")
-    parser.add_argument("--timeout", default=1.0, type=float, help="Maximum timeout before giving up")
     parser.add_argument("--list-ports", action="store_true", help="List all COM ports connected to computer")
     parser.add_argument("--reset", action="store_true", help="Reset arduino on connection")
     args = parser.parse_args()
@@ -34,7 +33,6 @@ def main():
     ser = serial.Serial()
     ser.port = port_name
     ser.baudrate = args.baudrate
-    ser.timeout = args.timeout
     ser.dtr = args.reset
     ser.open()
 
@@ -44,13 +42,13 @@ def main():
     def read_serial():
         while True:
             try:
-                line = ser.readline()
+                data = ser.read_until(expected=bytes([COBS_DELIMITER_BYTE]))
             except Exception as ex:
                 print(f"Exiting reader thread: {ex}")
                 return
-            if len(line) == 0:
+            if len(data) == 0:
                 continue
-            print(f"> {line}")
+            print(f"> {data}")
 
     def write_serial():
         temperature = 100

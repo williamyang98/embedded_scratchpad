@@ -4,7 +4,6 @@
 #include "./font.hpp"
 #include "./tft.hpp"
 #include "./pgmspace.h"
-#include "./Arduino.hpp"
 
 struct RightToLeftPrinter {
     uint16_t prev_x_end;
@@ -46,7 +45,7 @@ struct RightToLeftPrinter {
     }
 
     template <typename F, typename G>
-    void print_string(const __FlashStringHelper* flash_str, F background_colour_source, G glyph_source) {
+    void print_string(const FlashString* flash_str, F background_colour_source, G glyph_source) {
         const char* str = reinterpret_cast<const char*>(flash_str);
         uint8_t length = 0;
         while (length < 255) {
@@ -128,7 +127,7 @@ struct LeftToRightPrinter {
     }
 
     template <typename F, typename G>
-    void print_string(const __FlashStringHelper* flash_str, F background_colour_source, G glyph_source) {
+    void print_string(const FlashString* flash_str, F background_colour_source, G glyph_source) {
         const char* str = reinterpret_cast<const char*>(flash_str);
         for (uint8_t i = 0; i < 255; i++) {
             const uint8_t c = pgm_read_byte(str + i);

@@ -8,3 +8,6 @@
 #else
 #include <avr/pgmspace.h>
 #endif
+
+class FlashString;
+#define FLASH_STRING(str) (reinterpret_cast<const FlashString*>(PSTR(str)))

@@ -5,7 +5,6 @@ set(SRC_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 
 add_executable(st7789
     ${SRC_DIR}/main.cpp
-    ${SRC_DIR}/st7789.cpp
     ${SRC_DIR}/tft.cpp
 )
 target_include_directories(st7789 PRIVATE ${SRC_DIR})

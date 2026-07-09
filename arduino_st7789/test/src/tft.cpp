@@ -1,5 +1,5 @@
 #include "./tft.hpp"
-#include "./Arduino.hpp"
+#include "./st7789.hpp"
 
 namespace tft {
 

@@ -1,15 +1,14 @@
 #pragma once
 
-#include "./Arduino.hpp"
+#include "./serial.hpp"
 #include "./app.hpp"
 #include "./commands.hpp"
-
-extern App app;
-extern CommandParser command_parser;
+#include "./response.hpp"
+#include "./pgmspace.h"
 
 static void sketch_setup() {
     Serial.begin(9600);
-    Serial.println(F("Starting up st7789 controller"));
+    response_sender.send_message(FLASH_STRING("Initating ST7789 sketch"));
     tft::init();
     tft::set_brightness(50);
     app.render_all();

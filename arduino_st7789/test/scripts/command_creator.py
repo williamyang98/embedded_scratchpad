@@ -1,10 +1,10 @@
 # python counterpart to cobs_encode(...) in ../src/cobs.hpp
+COBS_DELIMITER_BYTE = 0x00
+
 def cobs_encode(src_buffer: bytearray):
     src_length_bytes = len(src_buffer)
     if src_length_bytes > 254:
         src_length_bytes = 254
-
-    COBS_DELIMITER_BYTE = 0x00
 
     dest_buffer = bytearray(src_length_bytes+2)
     dest_i = 1
