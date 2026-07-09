@@ -100,55 +100,73 @@ private:
 #include <array>
 
 // sender counterpart to CommandParser::parse_command
-class CommandSender {
-private:
-    std::shared_ptr<Pipe> m_pipe_in = nullptr;
-public:
-    CommandSender(std::shared_ptr<Pipe> pipe_in): m_pipe_in(pipe_in) {}
-
-    void trigger_render() {
-        std::array<const uint8_t, 1> packet = {
+struct CommandCreator {
+    std::array<uint8_t, 1> trigger_render() {
+        return {
             static_cast<uint8_t>(CommandHeader::TRIGGER_RENDER),
         };
-        send_packet(packet);
     }
 
-    void set_temperature(int16_t temperature) {
-        std::array<const uint8_t, 3> packet = {
+    std::array<uint8_t, 3> set_temperature(int16_t temperature) {
+        return {
             static_cast<uint8_t>(CommandHeader::SET_TEMPERATURE),
             static_cast<uint8_t>(temperature >> 8),
             static_cast<uint8_t>(temperature & 0xFF),
         };
-        send_packet(packet);
     }
 
-    void set_humidity(uint16_t humidity) {
-        std::array<const uint8_t, 3> packet = {
+    std::array<uint8_t, 3> set_humidity(uint16_t humidity) {
+        return {
             static_cast<uint8_t>(CommandHeader::SET_HUMIDITY),
             static_cast<uint8_t>(humidity >> 8),
             static_cast<uint8_t>(humidity & 0xFF),
         };
-        send_packet(packet);
     }
 
-    void set_time_24_hour(uint16_t time_24_hour, bool is_show_24_hour, bool is_show_leading_zero) {
-        std::array<const uint8_t, 5> packet = {
+    std::array<uint8_t, 5> set_time_24_hour(uint16_t time_24_hour, bool is_show_24_hour, bool is_show_leading_zero) {
+        return {
             static_cast<uint8_t>(CommandHeader::SET_TIME_24_HOUR),
             static_cast<uint8_t>(time_24_hour >> 8),
             static_cast<uint8_t>(time_24_hour & 0xFF),
             static_cast<uint8_t>(is_show_24_hour ? 0x01 : 0x00),
             static_cast<uint8_t>(is_show_leading_zero ? 0x01 : 0x00),
         };
-        send_packet(packet);
     }
 
-    void set_wind_kph(uint16_t wind_kph) {
-        std::array<const uint8_t, 3> packet = {
+    std::array<uint8_t, 3> set_wind_kph(uint16_t wind_kph) {
+        return {
             static_cast<uint8_t>(CommandHeader::SET_WIND_KPH),
             static_cast<uint8_t>(wind_kph >> 8),
             static_cast<uint8_t>(wind_kph & 0xFF),
         };
-        send_packet(packet);
+    }
+};
+
+class CommandSender {
+private:
+    std::shared_ptr<Pipe> m_pipe_in = nullptr;
+    CommandCreator m_creator;
+public:
+    CommandSender(std::shared_ptr<Pipe> pipe_in): m_pipe_in(pipe_in) {}
+
+    void trigger_render() {
+        send_packet(m_creator.trigger_render());
+    }
+
+    void set_temperature(int16_t temperature) {
+        send_packet(m_creator.set_temperature(temperature));
+    }
+
+    void set_humidity(uint16_t humidity) {
+        send_packet(m_creator.set_humidity(humidity));
+    }
+
+    void set_time_24_hour(uint16_t time_24_hour, bool is_show_24_hour, bool is_show_leading_zero) {
+        send_packet(m_creator.set_time_24_hour(time_24_hour, is_show_24_hour, is_show_leading_zero));
+    }
+
+    void set_wind_kph(uint16_t wind_kph) {
+        send_packet(m_creator.set_wind_kph(wind_kph));
     }
 
     void close() {
@@ -156,7 +174,7 @@ public:
     }
 private:
     template <size_t N>
-    void send_packet(std::array<const uint8_t, N> data_in) {
+    void send_packet(std::array<uint8_t, N> data_in) {
         std::array<uint8_t, N+2> data_out;
         cobs_encode(data_in.data(), uint8_t(data_in.size()), data_out.data());
         m_pipe_in->write_block(data_out);

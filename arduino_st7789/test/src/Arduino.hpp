@@ -45,9 +45,9 @@ struct HardwareSerial {
         if (m_pipe_in != nullptr) m_pipe_in->close();
         if (m_fp_out != nullptr) fclose(m_fp_out);
     }
-    void println(const __FlashStringHelper* str) {
+    template <typename T> void println(T x) {}
+    template <typename T> void print(T x) {}
 
-    }
 };
 
 extern HardwareSerial Serial;

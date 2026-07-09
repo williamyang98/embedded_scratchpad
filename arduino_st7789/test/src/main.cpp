@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <thread>
 #include "./sketch.hpp"
-#include <array>
 
 HardwareSerial Serial; // extern
 ST7789 st7789(tft::SCREEN_WIDTH, tft::SCREEN_HEIGHT); // extern

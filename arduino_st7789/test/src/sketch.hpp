@@ -12,11 +12,10 @@ static void sketch_setup() {
     Serial.println(F("Starting up st7789 controller"));
     tft::init();
     tft::set_brightness(50);
+    app.render_all();
 }
 
 static void sketch_loop() {
-    app.render_all();
-
     while (true) {
         const int result = Serial.read();
         if (result == -1) break;
