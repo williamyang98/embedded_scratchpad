@@ -1,31 +1,31 @@
 <!DOCTYPE html>
 <html lang="" data-theme="light">
-  <head>
-    <meta charset="UTF-8">
-    <title>ST7789 Development Server</title>
-    <link rel="stylesheet" href="./index.css"/>
-  </head>
-  <body>
-    <script type="importmap">
-      {
-        "imports": {
-          "vue": "https://unpkg.com/vue@3.5.39/dist/vue.esm-browser.js",
-          "vue3-sfc-loader": "https://unpkg.com/vue3-sfc-loader@0.9.5/dist/vue3-sfc-loader.esm.js"
-        }
+<head>
+  <meta charset="UTF-8">
+  <title>ST7789 Development Server</title>
+  <link rel="stylesheet" href="./index.css"/>
+</head>
+<body>
+  <script type="importmap">
+    {
+      "imports": {
+        "vue": "https://unpkg.com/vue@3.5.39/dist/vue.esm-browser.js",
+        "vue3-sfc-loader": "https://unpkg.com/vue3-sfc-loader@0.9.5/dist/vue3-sfc-loader.esm.js"
       }
-    </script>
-    <style id="vue_generated_styles"></style>
-    <div id="app"></div>
-    <script type="module">
-      import { createApp } from "vue";
-      import { import_component } from "./loader.js";
-      const app = createApp({
-        components: {
-          AppView: import_component("./AppView.vue"),
-        },
-        template: "<AppView/>",
-      });
-      app.mount("#app");
-    </script>
-  </body>
+    }
+  </script>
+  <style id="vue_generated_styles"></style>
+  <div id="app"></div>
+  <script type="module">
+    import { createApp } from "vue";
+    import { import_component } from "./loader.js";
+    const app = createApp({
+      components: {
+        AppView: import_component("./AppView.vue"),
+      },
+      template: "<AppView/>",
+    });
+    app.mount("#app");
+  </script>
+</body>
 </html>

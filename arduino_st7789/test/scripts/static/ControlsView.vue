@@ -11,37 +11,37 @@ const time_show_24_hour = ref(false);
 const time_show_leading_zeros = ref(false);
 
 function emit_command(command) {
-    emits("command", command);
+  emits("command", command);
 }
 
 function set_temperature() {
-    emit_command({
-        "type": "set_temperature",
-        "temperature": temperature_celcius.value,
-    });
+  emit_command({
+    "type": "set_temperature",
+    "temperature": temperature_celcius.value,
+  });
 }
 
 function set_wind_kph() {
-    emit_command({
-        "type": "set_wind_kph",
-        "wind_kph": wind_kph.value,
-    });
+  emit_command({
+    "type": "set_wind_kph",
+    "wind_kph": wind_kph.value,
+  });
 }
 
 function set_humidity() {
-    emit_command({
-        "type": "set_humidity",
-        "humidity": humidity_percent.value,
-    });
+  emit_command({
+    "type": "set_humidity",
+    "humidity": humidity_percent.value,
+  });
 }
 
 function set_time_24_hour() {
-    emit_command({
-        "type": "set_time_24_hour",
-        "time_24_hour": time_24_hour.value,
-        "show_24_hour": time_show_24_hour.value,
-        "show_leading_zeros": time_show_leading_zeros.value,
-    });
+  emit_command({
+    "type": "set_time_24_hour",
+    "time_24_hour": time_24_hour.value,
+    "show_24_hour": time_show_24_hour.value,
+    "show_leading_zeros": time_show_leading_zeros.value,
+  });
 }
 
 watchEffect(set_temperature);
@@ -50,23 +50,23 @@ watchEffect(set_humidity);
 watchEffect(set_time_24_hour);
 
 function trigger_render() {
-    emit_command({
-        "type": "trigger_render",
-    });
+  emit_command({
+    "type": "trigger_render",
+  });
 }
 
 function refresh_all() {
-    set_temperature();
-    set_wind_kph();
-    set_humidity();
-    set_time_24_hour();
-    trigger_render();
+  set_temperature();
+  set_wind_kph();
+  set_humidity();
+  set_time_24_hour();
+  trigger_render();
 }
 
 defineExpose({
-    submit() {
-        refresh_all();
-    }
+  submit() {
+    refresh_all();
+  }
 })
 
 </script>

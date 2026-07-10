@@ -14,8 +14,8 @@ const selected_frame = computed(() => frames.value[selected_frame_index.value]);
 const websocket = ref(null);
 const is_running = ref(false);
 const can_send_commands = computed(() => {
-    if (websocket.value === null) return false;
-    return websocket.value.readyState === WebSocket.OPEN;
+  if (websocket.value === null) return false;
+  return websocket.value.readyState === WebSocket.OPEN;
 });
 
 const is_pin_frame = ref(false);
@@ -34,16 +34,16 @@ function launch_process() {
   try {
     websocket.value = new WebSocket(websocket_url);
     websocket.value.addEventListener("open", () => {
-        if (controls_elem.value === null) return;
-        controls_elem.value.submit();
+      if (controls_elem.value === null) return;
+      controls_elem.value.submit();
     });
     websocket.value.addEventListener("message", (event) => {
       if (typeof event.data === "string") {
         const data = JSON.parse(event.data);
         if (data.type === "debug_frame") {
-            previous_frame_header = data;
+          previous_frame_header = data;
         } else {
-            console.log(data);
+          console.log(data);
         }
       } else {
         const header = previous_frame_header;
