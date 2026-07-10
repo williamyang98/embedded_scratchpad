@@ -14,13 +14,20 @@ logger = logging.getLogger(__name__)
 async def run_blocking(event_loop, callback):
     future = event_loop.create_future()
     def thread_runner():
-        result = callback()
-        event_loop.call_soon_threadsafe(future.set_result, result)
+        try:
+            result = callback()
+            is_success = True
+        except Exception as ex:
+            result = ex
+            is_success = False
+        event_loop.call_soon_threadsafe(future.set_result, (is_success, result))
     thread = threading.Thread(target=thread_runner)
     thread.start()
-    result = await future
+    is_success, result = await future
     thread.join()
-    return result
+    if is_success:
+        return result
+    raise result
 
 class CustomResponseHandler(ResponseHandler):
     def __init__(self, websocket, event_loop):
@@ -161,7 +168,11 @@ class App:
             elif message.type == WSMsgType.CLOSE:
                 break
 
-        await run_blocking(event_loop, lambda: device.wait())
+        try:
+            await run_blocking(event_loop, lambda: device.wait())
+        except Exception as ex:
+            logger.error(f"Failed to wait for device: {ex}")
+
         await response_handler.wait_messages_sent()
 
     async def on_cleanup(self, web_app):
