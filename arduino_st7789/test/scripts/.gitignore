@@ -1,4 +1,3 @@
 venv/
 glyphs/*
-!glyphs/glyph.hpp
 __pycache__/

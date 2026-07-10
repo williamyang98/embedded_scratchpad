@@ -54,7 +54,7 @@ class IconCpp:
         array = icon.quantized_image.flatten()
         array_body_cpp = ','.join((f"0x{value:02X}" for value in array))
         self.array_declaration = f"static const uint8_t {self.array_name}[{icon.total_bytes}] PROGMEM = {{{ array_body_cpp }}};"
-        self.glyph_declaration = f"static const glyph::Glyph {self.glyph_name} = {{ {icon.width}, {icon.height}, {self.array_name}, {icon.total_bytes}, {ENCODING_CPP_ENUM} }};"
+        self.glyph_declaration = f"static const glyph::Glyph {self.glyph_name} PROGMEM = {{ {icon.width}, {icon.height}, {self.array_name}, {icon.total_bytes}, {ENCODING_CPP_ENUM} }};"
 
 
 class IconsFolder:
@@ -124,10 +124,10 @@ enum class Icon: uint8_t {{
 {'\n'.join((f"    {icon_cpp.enum_name}={index}," for index, icon_cpp in enumerate(icons_cpp)))}
 }};
 
-static const glyph::Glyph& get_icon(Icon icon) {{
+static const FlashMemory<glyph::Glyph>* get_icon(Icon icon) {{
     switch (icon) {{
-{'\n'.join((f"    case Icon::{icon_cpp.enum_name}: return {icon_cpp.glyph_name};" for icon_cpp in icons_cpp))}
-    default: return {default_icon_cpp.glyph_name};
+{'\n'.join((f"    case Icon::{icon_cpp.enum_name}: return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(&{icon_cpp.glyph_name});" for icon_cpp in icons_cpp))}
+    default: return nullptr;
     }}
 }}
 
@@ -219,7 +219,7 @@ def main():
         return indented_code_block
 
     header = f"""#pragma once
-#include "./glyph.hpp"
+#include "../../src/glyph.hpp"
 #include <stdint.h>
 
 namespace {args.namespace} {{

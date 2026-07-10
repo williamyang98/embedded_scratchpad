@@ -19,7 +19,11 @@ struct RightToLeftPrinter {
     }
 
     template <typename F>
-    bool print_glyph(const glyph::Glyph& glyph, F background_colour_source) {
+    bool print_glyph(const FlashMemory<glyph::Glyph>* glyph_ptr, F background_colour_source) {
+        if (glyph_ptr == nullptr) return false;
+        glyph::Glyph glyph;
+        memcpy_P(&glyph, glyph_ptr, sizeof(glyph));
+
         if (x_end+1 < glyph.width) return false;
         if (y_end+1 < glyph.height) return false;
 
@@ -39,13 +43,12 @@ struct RightToLeftPrinter {
 
     template <typename F, typename G>
     bool print_char(uint8_t c, F background_colour_source, G glyph_source) {
-        const glyph::Glyph* glyph = glyph_source(c);
-        if (glyph == nullptr) return false;
-        return print_glyph(*glyph, background_colour_source);
+        const FlashMemory<glyph::Glyph>* glyph = glyph_source(c);
+        return print_glyph(glyph, background_colour_source);
     }
 
     template <typename F, typename G>
-    void print_string(const FlashString* flash_str, F background_colour_source, G glyph_source) {
+    void print_string(const FlashMemory<char>* flash_str, F background_colour_source, G glyph_source) {
         const char* str = reinterpret_cast<const char*>(flash_str);
         uint8_t length = 0;
         while (length < 255) {
@@ -108,7 +111,10 @@ struct LeftToRightPrinter {
     }
 
     template <typename F>
-    bool print_glyph(const glyph::Glyph& glyph, F background_colour_source) {
+    bool print_glyph(const FlashMemory<glyph::Glyph>* glyph_ptr, F background_colour_source) {
+        if (glyph_ptr == nullptr) return false;
+        glyph::Glyph glyph;
+        memcpy_P(&glyph, glyph_ptr, sizeof(glyph));
         const uint16_t x_end = x_start+glyph.width-1;
         if (x_end >= tft::SCREEN_WIDTH) return false;
         if (y_end+1 < glyph.height) return false;
@@ -121,13 +127,12 @@ struct LeftToRightPrinter {
 
     template <typename F, typename G>
     bool print_char(uint8_t c, F background_colour_source, G glyph_source) {
-        const glyph::Glyph* glyph = glyph_source(c);
-        if (glyph == nullptr) return false;
-        return print_glyph(*glyph, background_colour_source);
+        const FlashMemory<glyph::Glyph>* glyph = glyph_source(c);
+        return print_glyph(glyph, background_colour_source);
     }
 
     template <typename F, typename G>
-    void print_string(const FlashString* flash_str, F background_colour_source, G glyph_source) {
+    void print_string(const FlashMemory<char>* flash_str, F background_colour_source, G glyph_source) {
         const char* str = reinterpret_cast<const char*>(flash_str);
         for (uint8_t i = 0; i < 255; i++) {
             const uint8_t c = pgm_read_byte(str + i);

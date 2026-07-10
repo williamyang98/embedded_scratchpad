@@ -336,7 +336,7 @@ private:
         const auto& icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
         printer.print_glyph(icon, background_colour);
         printer.print_char(' ', background_colour, get_glyph);
-        const FlashString* description = nullptr;
+        const FlashMemory<char>* description = nullptr;
         if (m_temperature_celcius < 0) {
             description = FLASH_STRING("HEAVY SNOWSTORM");
         } else if (m_temperature_celcius < 200) {
@@ -359,29 +359,29 @@ private:
         auto& printer = m_printers.humidity_description;
         printer.x_start = m_x_margin;
 
-        const glyph::Glyph* icon = nullptr;
+        const FlashMemory<glyph::Glyph>* icon = nullptr;
         rgb565_t icon_colour = COLOUR.RED;
-        const FlashString* description = nullptr;
+        const FlashMemory<char>* description = nullptr;
         if (m_humidity_percent < 100) {
             description = FLASH_STRING("DRY AIR");
-            icon = &mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
+            icon = mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
             icon_colour = COLOUR.YELLOW;
         } else if (m_humidity_percent < 300) {
             description = FLASH_STRING("MODERATE HUMIDITY");
-            icon = &mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
+            icon = mini_icons::get_icon(mini_icons::Icon::WARNING_TRIANGLE);
             icon_colour = COLOUR.RED;
         } else if (m_humidity_percent < 600) {
             description = FLASH_STRING("HEATSTROKE RISK");
-            icon = &mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
+            icon = mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
             icon_colour = COLOUR.RED;
         } else {
             description = FLASH_STRING("UNDERWATER");
-            icon = &mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
+            icon = mini_icons::get_icon(mini_icons::Icon::TICK_CIRCLE);
             icon_colour = COLOUR.GREEN;
         }
         if (icon != nullptr) {
             printer.text_colour = icon_colour;
-            printer.print_glyph(*icon, background_colour);
+            printer.print_glyph(icon, background_colour);
             printer.text_colour = m_text_colour;
             printer.print_char(' ', background_colour, get_glyph);
         }

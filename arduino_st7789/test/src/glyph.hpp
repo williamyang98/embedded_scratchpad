@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#include "../../src/pgmspace.h"
+#include "./pgmspace.h"
 
 namespace glyph {
 

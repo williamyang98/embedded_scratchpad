@@ -74,9 +74,9 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
         else:
             glyph_array_name = "nullptr"
 
-        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} = {{ {width}, {height}, {glyph_array_name}, {encoded_size_bytes}, glyph::{encoder_cpp_enum} }};";
+        glyph_declaration = f"static const glyph::Glyph glyph_{glyph_name} PROGMEM = {{ {width}, {height}, {glyph_array_name}, {encoded_size_bytes}, glyph::{encoder_cpp_enum} }};";
         glyph_declarations.append(glyph_declaration)
-        switch_statement_cases.append(f"case 0x{ord(glyph):02X}: return &glyph_{glyph_name};")
+        switch_statement_cases.append(f"case 0x{ord(glyph):02X}: return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(&glyph_{glyph_name});")
 
         original_size_bytes = width*height
         compression_ratio = encoded_size_bytes/original_size_bytes
@@ -103,7 +103,7 @@ def create_font_cpp_header(namespace, font, glyphs, encoding):
     print(tabulate(table_rows, table_headers, tablefmt="outline"))
 
     header = f"""#pragma once
-#include "./glyph.hpp"
+#include "../../src/glyph.hpp"
 #include <stdint.h>
 
 namespace {namespace} {{
@@ -116,7 +116,7 @@ static constexpr uint16_t MAX_HEIGHT = {max_height};
 static constexpr uint16_t MAX_WIDTH = {max_height};
 static constexpr uint16_t TOTAL_GLYPHS = {len(glyphs)};
 
-static const glyph::Glyph* get_glyph(uint8_t c) {{
+static const FlashMemory<glyph::Glyph>* get_glyph(uint8_t c) {{
     switch (c) {{
 {'\n'.join(('    ' + case for case in switch_statement_cases))}
     default: return nullptr;

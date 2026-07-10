@@ -3,7 +3,7 @@
 #include "./bit_reader.hpp"
 #include "./tft.hpp"
 #include "./rgb565.hpp"
-#include "../scripts/glyphs/glyph.hpp"
+#include "./glyph.hpp"
 #include "../scripts/glyphs/icons.hpp"
 
 template <typename F>

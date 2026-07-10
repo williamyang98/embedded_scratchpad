@@ -43,7 +43,7 @@ public:
         const size_t encoded_size = cobs::encode(m_decoded_buffer, 2, m_encoded_buffer);
         Serial.write(m_encoded_buffer, encoded_size);
     }
-    void send_message(const FlashString* str) {
+    void send_message(const FlashMemory<char>* str) {
         const uint8_t* buffer = reinterpret_cast<const uint8_t*>(str);
         // one byte for header, rest for string data
         m_decoded_buffer[0] = static_cast<uint8_t>(ResponseHeader::LOG_MESSAGE);
