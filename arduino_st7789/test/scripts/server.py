@@ -229,11 +229,15 @@ def main():
 
         import serial
         def create_device(response_handler):
-            ser = serial.Serial()
-            ser.port = port_name
-            ser.baudrate = args.baudrate
-            ser.dtr = args.reset
-            ser.open()
+            try:
+                ser = serial.Serial()
+                ser.port = port_name
+                ser.baudrate = args.baudrate
+                ser.dtr = args.reset
+                ser.open()
+            except Exception as ex:
+                logger.error(f"Failed to open serial device '{port_name}': {ex}")
+                return None
 
             device = SerialDevice(ser, response_handler)
             return device
