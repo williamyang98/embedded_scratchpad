@@ -55,7 +55,6 @@ class IconCpp:
         array_body_cpp = ','.join((f"0x{value:02X}" for value in array))
         self.array_declaration = f"static const uint8_t {self.array_name}[{icon.total_bytes}] PROGMEM = {{{ array_body_cpp }}};"
         self.glyph_declaration = f"static const glyph::Glyph {self.glyph_name} PROGMEM = {{ {icon.width}, {icon.height}, {self.array_name}, {icon.total_bytes}, {ENCODING_CPP_ENUM} }};"
-        self.switch_case = f"case Icon::{self.enum_name}: return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(&{self.glyph_name});"
 
 class IconsFolder:
     def __init__(self, namespace, dirpath):
@@ -75,6 +74,7 @@ class IconsFolder:
                 self.icons.append(icon)
 
         assert len(self.icons) > 0, f"Folder: '{dirpath}' has no icons"
+        assert len(self.icons) <= 255, f"Total number of icons must fit inside uint8_t but got {len(self.icons)} icons for '{dirpath}'"
 
         self.max_width = max((icon.width for icon in self.icons))
         self.max_height = max((icon.height for icon in self.icons))
@@ -123,11 +123,32 @@ enum class Icon: uint8_t {{
 {'\n'.join((f"    {icon_cpp.enum_name}={index}," for index, icon_cpp in enumerate(icons_cpp)))}
 }};
 
+struct IconEntry {{
+    Icon icon;
+    const glyph::Glyph* glyph;
+}};
+
+static const IconEntry icon_entries[TOTAL_ICONS] PROGMEM = {{
+{'\n'.join((f"    {{ Icon::{icon_cpp.enum_name}, &{icon_cpp.glyph_name} }}," for icon_cpp in icons_cpp))}
+}};
+
 static const FlashMemory<glyph::Glyph>* get_icon(Icon icon) {{
-    switch (icon) {{
-{'\n'.join(("    " + icon_cpp.switch_case for icon_cpp in icons_cpp))}
-    default: return nullptr;
+    // binary search through sorted array of icons by enum value
+    uint8_t low_i = 0;
+    uint8_t high_i = TOTAL_ICONS;
+    IconEntry entry;
+    while (low_i < high_i) {{
+        const uint8_t mid_i = low_i + (high_i-low_i)/2;
+        memcpy_P(&entry, icon_entries + mid_i, sizeof(IconEntry));
+        if (entry.icon < icon) {{
+            low_i = mid_i+1;
+        }} else if (entry.icon > icon) {{
+            high_i = mid_i;
+        }} else {{
+            return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(entry.glyph);
+        }}
     }}
+    return nullptr;
 }}
 
 }};

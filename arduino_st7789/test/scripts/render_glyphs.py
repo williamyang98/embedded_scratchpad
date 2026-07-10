@@ -79,7 +79,6 @@ class FontGlyphCpp:
 
         self.ascii_value = ord(glyph.char)
         assert self.ascii_value <= 255, f"Character must be fit within uint8_t either ASCII or extended ASCII but got '{glyph.char}' which has a value of 0x{self.ascii_value}"
-        self.switch_case = f"case 0x{self.ascii_value:02X}: return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(&{self.glyph_name});"
 
 class FontGlyphs:
     def __init__(self, namespace, font, chars, encoding):
@@ -136,6 +135,8 @@ class FontGlyphs:
 
     def get_cpp_string(self):
         glyphs_cpp = [FontGlyphCpp(glyph) for glyph in self.glyphs]
+        glyphs_cpp = sorted(glyphs_cpp, key=lambda glyph: glyph.ascii_value)
+
         return \
 f"""#pragma once
 #include "../../src/glyph.hpp"
@@ -149,13 +150,34 @@ namespace {self.namespace} {{
 
 static constexpr uint16_t MAX_HEIGHT = {self.max_height};
 static constexpr uint16_t MAX_WIDTH = {self.max_height};
-static constexpr uint16_t TOTAL_GLYPHS = {len(self.glyphs)};
+static constexpr uint8_t TOTAL_GLYPHS = {len(self.glyphs)};
+
+struct GlyphEntry {{
+    uint8_t character;
+    const glyph::Glyph* glyph;
+}};
+
+static const GlyphEntry glyph_entries[TOTAL_GLYPHS] PROGMEM = {{
+{'\n'.join((f"    {{ 0x{glyph_cpp.ascii_value:02X}, &{glyph_cpp.glyph_name} }}," for glyph_cpp in glyphs_cpp))}
+}};
 
 static const FlashMemory<glyph::Glyph>* get_glyph(uint8_t c) {{
-    switch (c) {{
-{'\n'.join(("    " + glyph_cpp.switch_case for glyph_cpp in glyphs_cpp))}
-    default: return nullptr;
+    // binary search through sorted array of glyphs by ascii value
+    uint8_t low_i = 0;
+    uint8_t high_i = TOTAL_GLYPHS;
+    GlyphEntry entry;
+    while (low_i < high_i) {{
+        const uint8_t mid_i = low_i + (high_i-low_i)/2;
+        memcpy_P(&entry, glyph_entries + mid_i, sizeof(GlyphEntry));
+        if (entry.character < c) {{
+            low_i = mid_i+1;
+        }} else if (entry.character > c) {{
+            high_i = mid_i;
+        }} else {{
+            return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(entry.glyph);
+        }}
     }}
+    return nullptr;
 }}
 
 }};
@@ -208,6 +230,7 @@ def main():
         if value == 1: continue
         logger.warn(f"Duplicate glyph '{key}' ignored with {value} instances")
     glyphs = sorted(glyphs.keys())
+    assert len(glyphs) <= 255, f"Total number of glyphs must fit in uint8_t but got {len(glyphs)} glyphs"
 
     print(f"Generating glyphs: total={len(glyphs)}, namespace={namespace}, encoding={args.encoding}, size={args.size}")
 
