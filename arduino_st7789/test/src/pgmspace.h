@@ -5,6 +5,7 @@
 
 #define pgm_read_byte(x) *(x)
 #define pgm_read_word(x) *(x)
+#define pgm_read_ptr(x) *(x)
 #define PSTR(x) x
 #define PROGMEM
 

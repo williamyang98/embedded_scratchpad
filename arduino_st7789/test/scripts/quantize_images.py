@@ -123,32 +123,14 @@ enum class Icon: uint8_t {{
 {'\n'.join((f"    {icon_cpp.enum_name}={index}," for index, icon_cpp in enumerate(icons_cpp)))}
 }};
 
-struct IconEntry {{
-    Icon icon;
-    const glyph::Glyph* glyph;
-}};
-
-static const IconEntry icon_entries[TOTAL_ICONS] PROGMEM = {{
-{'\n'.join((f"    {{ Icon::{icon_cpp.enum_name}, &{icon_cpp.glyph_name} }}," for icon_cpp in icons_cpp))}
+static const glyph::Glyph* const icons[TOTAL_ICONS] PROGMEM = {{
+{'\n'.join((f"    &{icon_cpp.glyph_name}," for icon_cpp in icons_cpp))}
 }};
 
 static const FlashMemory<glyph::Glyph>* get_icon(Icon icon) {{
-    // binary search through sorted array of icons by enum value
-    uint8_t low_i = 0;
-    uint8_t high_i = TOTAL_ICONS;
-    IconEntry entry;
-    while (low_i < high_i) {{
-        const uint8_t mid_i = low_i + (high_i-low_i)/2;
-        memcpy_P(&entry, icon_entries + mid_i, sizeof(IconEntry));
-        if (entry.icon < icon) {{
-            low_i = mid_i+1;
-        }} else if (entry.icon > icon) {{
-            high_i = mid_i;
-        }} else {{
-            return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(entry.glyph);
-        }}
-    }}
-    return nullptr;
+    const uint8_t index = static_cast<uint8_t>(icon);
+    if (index >= TOTAL_ICONS) return nullptr;
+    return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(pgm_read_ptr(icons + index));
 }}
 
 }};
