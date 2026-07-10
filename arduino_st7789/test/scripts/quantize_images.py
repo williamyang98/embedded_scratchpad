@@ -55,7 +55,7 @@ class IconCpp:
         array_body_cpp = ','.join((f"0x{value:02X}" for value in array))
         self.array_declaration = f"static const uint8_t {self.array_name}[{icon.total_bytes}] PROGMEM = {{{ array_body_cpp }}};"
         self.glyph_declaration = f"static const glyph::Glyph {self.glyph_name} PROGMEM = {{ {icon.width}, {icon.height}, {self.array_name}, {icon.total_bytes}, {ENCODING_CPP_ENUM} }};"
-
+        self.switch_case = f"case Icon::{self.enum_name}: return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(&{self.glyph_name});"
 
 class IconsFolder:
     def __init__(self, namespace, dirpath):
@@ -99,7 +99,7 @@ class IconsFolder:
         table_rows.append(SEPARATING_LINE)
         table_rows.append([
             None,
-            None, None,
+            self.max_width, self.max_height,
             humanize.naturalsize(self.total_bytes, format="%.3f"),
             self.total_transparency_pixels,
             self.total_chroma_key_pixels,
@@ -109,7 +109,6 @@ class IconsFolder:
 
     def get_cpp_string(self):
         icons_cpp = [IconCpp(icon) for icon in self.icons]
-        default_icon_cpp = icons_cpp[0]
         return \
 f"""namespace {self.namespace} {{
 
@@ -126,7 +125,7 @@ enum class Icon: uint8_t {{
 
 static const FlashMemory<glyph::Glyph>* get_icon(Icon icon) {{
     switch (icon) {{
-{'\n'.join((f"    case Icon::{icon_cpp.enum_name}: return reinterpret_cast<const FlashMemory<glyph::Glyph>*>(&{icon_cpp.glyph_name});" for icon_cpp in icons_cpp))}
+{'\n'.join(("    " + icon_cpp.switch_case for icon_cpp in icons_cpp))}
     default: return nullptr;
     }}
 }}
