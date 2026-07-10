@@ -12,10 +12,11 @@ const selected_frame_index = ref(0);
 const selected_frame = computed(() => frames.value[selected_frame_index.value]);
 
 const websocket = ref(null);
+const websocket_state = ref(WebSocket.CLOSED);
 const is_running = ref(false);
 const can_send_commands = computed(() => {
   if (websocket.value === null) return false;
-  return websocket.value.readyState === WebSocket.OPEN;
+  return websocket_state.value === WebSocket.OPEN;
 });
 
 const is_pin_frame = ref(false);
@@ -33,7 +34,9 @@ function launch_process() {
   let previous_frame_header = null;
   try {
     websocket.value = new WebSocket(websocket_url);
+    websocket_state.value = WebSocket.CONNECTING;
     websocket.value.addEventListener("open", () => {
+      websocket_state.value = WebSocket.OPEN;
       if (controls_elem.value === null) return;
       controls_elem.value.submit();
     });
@@ -59,10 +62,12 @@ function launch_process() {
       }
     });
     websocket.value.addEventListener("close", (event) => {
+      websocket_state.value = WebSocket.CLOSED;
       websocket.value = null;
       is_running.value = false;
     });
   } catch {
+    websocket_state.value = WebSocket.CLOSED;
     websocket.value = null;
     is_running.value = false;
   }
@@ -70,13 +75,13 @@ function launch_process() {
 
 function end_process() {
     if (websocket.value === null) return;
-    if (websocket.value.readyState !== WebSocket.OPEN) return;
+    if (websocket_state.value !== WebSocket.OPEN) return;
     websocket.value.close();
 }
 
 function on_command(command) {
     if (websocket.value === null) return;
-    if (websocket.value.readyState !== WebSocket.OPEN) return;
+    if (websocket_state.value !== WebSocket.OPEN) return;
     websocket.value.send(JSON.stringify(command));
 }
 
