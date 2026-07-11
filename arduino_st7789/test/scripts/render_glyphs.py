@@ -139,7 +139,7 @@ class FontGlyphs:
 
         return \
 f"""#pragma once
-#include "../../src/glyph.hpp"
+#include "../graphics/glyph.hpp"
 #include <stdint.h>
 
 namespace {self.namespace} {{
@@ -212,7 +212,7 @@ def main():
     formatted_namespace = get_formatted_namespace(font_basename)
     output = args.output
     if output == None:
-        output = os.path.join("./glyphs", f"{formatted_namespace}.hpp")
+        output = os.path.join("../src/glyphs", f"{formatted_namespace}.hpp")
     namespace = args.namespace
     if namespace == None:
         namespace = formatted_namespace

@@ -1,16 +1,16 @@
 #pragma once
 
-#include "./tft.hpp"
-#include "./printers.hpp"
-#include "./rgb565.hpp"
-#include "./colour_functions.hpp"
-#include "./pgmspace.h"
-#include "./response.hpp"
-#include "./font.hpp"
-#include "../scripts/glyphs/large_font.hpp"
-#include "../scripts/glyphs/small_font.hpp"
-#include "../scripts/glyphs/icons.hpp"
+#include "../hardware/tft.hpp"
+#include "../hardware/pgmspace.h"
+#include "../utility/printers.hpp"
+#include "../graphics/rgb565.hpp"
+#include "../graphics/colour_functions.hpp"
+#include "../graphics/render_glyphs.hpp"
+#include "../glyphs/large_font.hpp"
+#include "../glyphs/small_font.hpp"
+#include "../glyphs/icons.hpp"
 #include "./moon_phases.hpp"
+#include "./response.hpp"
 
 namespace weather_icons = icons::large;
 namespace mini_icons = icons::small;

@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "./rgb565.hpp"
+#include "../graphics/rgb565.hpp"
 
 // DOC: sitronix_st7789_datasheet.pdf
 namespace tft {

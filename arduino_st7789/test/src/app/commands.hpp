@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "./app.hpp"
-#include "./cobs.hpp"
+#include "../utility/cobs.hpp"
 #include "./response.hpp"
 
 enum class CommandHeader: uint8_t {

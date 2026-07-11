@@ -1,6 +1,6 @@
 #pragma once
 #include "./rgb565.hpp"
-#include "./tft.hpp"
+#include "../hardware/tft.hpp"
 
 struct ScreenSpaceColour {
     uint16_t x_start;

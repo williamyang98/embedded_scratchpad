@@ -185,7 +185,7 @@ static constexpr uint8_t CHROMA_KEY_PALETTE_VALUE = {CHROMA_KEY_PALETTE_VALUE};"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--images", default="./icons", type=str)
-    parser.add_argument("--output", default="./glyphs/icons.hpp", type=str)
+    parser.add_argument("--output", default="../src/glyphs/icons.hpp", type=str)
     parser.add_argument("--namespace", default="icons", type=str)
     args = parser.parse_args()
 
@@ -221,7 +221,7 @@ def main():
         return indented_code_block
 
     header = f"""#pragma once
-#include "../../src/glyph.hpp"
+#include "../graphics/glyph.hpp"
 #include <stdint.h>
 
 namespace {args.namespace} {{

@@ -1,10 +1,10 @@
 #pragma once
 #include <stdint.h>
-#include "./bit_reader.hpp"
-#include "./tft.hpp"
+#include "../utility/bit_reader.hpp"
+#include "../hardware/tft.hpp"
 #include "./rgb565.hpp"
 #include "./glyph.hpp"
-#include "../scripts/glyphs/icons.hpp"
+#include "../glyphs/icons.hpp"
 
 template <typename F>
 static void write_glyph_grayscale_rle_q4(const glyph::Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, F background_colour_source) {
@@ -20,7 +20,7 @@ static void write_glyph_grayscale_rle_q4(const glyph::Glyph& glyph, uint16_t x_s
 
     const uint16_t total_pixels = width*height;
     uint16_t curr_pixel = 0;
-    BitReader bit_reader(glyph.data);
+    BitReader bit_reader(reinterpret_cast<const FlashMemory<uint8_t>*>(glyph.data));
 
     tft::set_write_rect(x_start, x_end, y_start, y_end);
     tft::begin_write_pixel();

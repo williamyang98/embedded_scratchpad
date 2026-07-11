@@ -1,11 +1,11 @@
 #pragma once
 
-#include "./serial.hpp"
-#include "./tft.hpp"
-#include "./app.hpp"
-#include "./commands.hpp"
-#include "./response.hpp"
-#include "./pgmspace.h"
+#include "./hardware/serial.hpp"
+#include "./hardware/tft.hpp"
+#include "./hardware/pgmspace.h"
+#include "./app/app.hpp"
+#include "./app/commands.hpp"
+#include "./app/response.hpp"
 
 static void sketch_setup() {
     Serial.begin(9600);

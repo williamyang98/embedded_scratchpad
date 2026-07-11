@@ -1,9 +1,9 @@
 #pragma once
 #include <stdint.h>
-#include "./rgb565.hpp"
-#include "./font.hpp"
-#include "./tft.hpp"
-#include "./pgmspace.h"
+#include "../graphics/rgb565.hpp"
+#include "../graphics/render_glyphs.hpp"
+#include "../hardware/tft.hpp"
+#include "../hardware/pgmspace.h"
 
 struct RightToLeftPrinter {
     uint16_t prev_x_end;

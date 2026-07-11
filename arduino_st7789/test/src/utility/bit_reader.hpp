@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "./pgmspace.h"
+#include "../hardware/pgmspace.h"
 
 class BitReader {
 private:
@@ -9,7 +9,7 @@ private:
     uint8_t data_byte = 0;
     const uint8_t* data;
 public:
-    BitReader(const uint8_t* _data): data(_data) {}
+    BitReader(const FlashMemory<uint8_t>* _data): data(reinterpret_cast<const uint8_t*>(_data)) {}
     uint8_t read_bits(uint8_t n_bits) {
         if (curr_bit == 0) {
             data_byte = pgm_read_byte(data + curr_byte);

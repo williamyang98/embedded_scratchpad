@@ -1,15 +1,15 @@
 #pragma once
 #include <stdint.h>
-#include "./cobs.hpp"
-#include "./pgmspace.h"
-#include "./serial.hpp"
-#include "rgb565.hpp"
+#include "../utility/cobs.hpp"
+#include "../hardware/pgmspace.h"
+#include "../hardware/serial.hpp"
+#include "../graphics/rgb565.hpp"
 
 #ifdef TEST_HARNESS
 #include <format>
 #include <vector>
 #include <span>
-#include "./st7789.hpp"
+#include "../hardware/st7789.hpp"
 #endif
 
 

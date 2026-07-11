@@ -1,6 +1,6 @@
 #pragma once
-#include "../scripts/glyphs/icons.hpp"
-#include "./pgmspace.h"
+#include "../glyphs/icons.hpp"
+#include "../hardware/pgmspace.h"
 
 struct MoonPhaseIcon {
     icons::small::Icon icon;
