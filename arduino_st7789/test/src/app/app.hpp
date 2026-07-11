@@ -66,14 +66,16 @@ private:
     struct {
         RadialBackgroundColour freezing;
         RadialBackgroundColour cold;
+        RadialBackgroundColour normal;
         RadialBackgroundColour warm;
         RadialBackgroundColour hot;
     } m_background_colour;
     enum class BackgroundState: uint8_t {
         FREEZING = 0,
         COLD = 1,
-        WARM = 2,
-        HOT = 3,
+        NORMAL = 2,
+        WARM = 3,
+        HOT = 4,
     };
     BackgroundState m_background_state = BackgroundState::FREEZING;
     struct {
@@ -106,9 +108,11 @@ public:
         m_background_colour.freezing.delta_colour = create_rgb565_bits(2,4,2);
         m_background_colour.cold.background_colour = create_rgb565_u8(30, 30, 80);
         m_background_colour.cold.delta_colour = create_rgb565_bits(1,1,2);
-        m_background_colour.warm.background_colour = create_rgb565_u8(30, 80, 30);
-        m_background_colour.warm.delta_colour = create_rgb565_bits(1,4,1);
-        m_background_colour.hot.background_colour = create_rgb565_u8(80, 30, 30);
+        m_background_colour.normal.background_colour = create_rgb565_u8(30, 80, 30);
+        m_background_colour.normal.delta_colour = create_rgb565_bits(1,4,1);
+        m_background_colour.warm.background_colour = create_rgb565_u8(80, 50, 20);
+        m_background_colour.warm.delta_colour = create_rgb565_bits(2,2,1);
+        m_background_colour.hot.background_colour = create_rgb565_u8(80, 20, 20);
         m_background_colour.hot.delta_colour = create_rgb565_bits(2,1,1);
         // set line heights
         {
@@ -118,9 +122,9 @@ public:
             m_printers.time.y_end = y_text_end-1;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
             m_printers.temperature.y_end = y_text_end-1;
-            m_printers.weather_icon.y_end = y_text_end-1;
             y_text_end += m_y_margin+large_font::MAX_HEIGHT;
             m_printers.humidity.y_end = y_text_end-1;
+            m_printers.weather_icon.y_end = (m_printers.temperature.y_end+m_printers.humidity.y_end)/2;
             // small text
             y_text_end += 2*m_y_margin+small_font::MAX_HEIGHT;
             m_printers.location.y_end = y_text_end-1;
@@ -235,6 +239,7 @@ private:
         switch (m_background_state) {
         case BackgroundState::FREEZING: return m_background_colour.freezing;
         case BackgroundState::COLD: return m_background_colour.cold;
+        case BackgroundState::NORMAL: return m_background_colour.normal;
         case BackgroundState::WARM: return m_background_colour.warm;
         case BackgroundState::HOT: return m_background_colour.hot;
         default: return m_background_colour.freezing;
@@ -247,6 +252,8 @@ private:
             new_state = BackgroundState::FREEZING;
         } else if (m_temperature_celcius < 200) {
             new_state = BackgroundState::COLD;
+        } else if (m_temperature_celcius < 250) {
+            new_state = BackgroundState::NORMAL;
         } else if (m_temperature_celcius < 300) {
             new_state = BackgroundState::WARM;
         } else {
