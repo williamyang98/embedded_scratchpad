@@ -120,17 +120,17 @@ public:
 
         m_large_decoded_buffer.resize(0);
         push_large_value(static_cast<uint8_t>(ResponseHeader::DEBUG_FRAME));
-        push_large_value(st7789.m_rect.x_start);
-        push_large_value(st7789.m_rect.x_end);
-        push_large_value(st7789.m_rect.y_start);
-        push_large_value(st7789.m_rect.y_end);
-        push_large_value(st7789.m_cursor.x);
-        push_large_value(st7789.m_cursor.y);
-        push_large_value(st7789.m_width);
-        push_large_value(st7789.m_height);
-        push_large_value(st7789.m_brightness);
-        push_large_value(st7789.m_is_hardware_reset);
-        st7789.m_is_hardware_reset = 0;
+        push_large_value(g_st7789.m_rect.x_start);
+        push_large_value(g_st7789.m_rect.x_end);
+        push_large_value(g_st7789.m_rect.y_start);
+        push_large_value(g_st7789.m_rect.y_end);
+        push_large_value(g_st7789.m_cursor.x);
+        push_large_value(g_st7789.m_cursor.y);
+        push_large_value(g_st7789.m_width);
+        push_large_value(g_st7789.m_height);
+        push_large_value(g_st7789.m_brightness);
+        push_large_value(g_st7789.m_is_hardware_reset);
+        g_st7789.m_is_hardware_reset = 0;
 
         push_large_value(static_cast<uint32_t>(label.length()));
         push_large_array(std::span(
@@ -138,10 +138,10 @@ public:
             label.length()
         ));
 
-        const size_t total_pixels = st7789.m_buffer.size();
+        const size_t total_pixels = g_st7789.m_buffer.size();
         const size_t total_bytes = total_pixels*sizeof(rgb565_t);
         push_large_array(std::span(
-            reinterpret_cast<const uint8_t*>(st7789.m_buffer.data()),
+            reinterpret_cast<const uint8_t*>(g_st7789.m_buffer.data()),
             total_bytes
         ));
 
@@ -154,11 +154,11 @@ public:
 #endif
 };
 
-extern ResponseSender response_sender;
+extern ResponseSender g_response_sender;
 
 #ifdef TEST_HARNESS
-#define DEBUG_MESSAGE(...) response_sender.debug_message(__VA_ARGS__)
-#define DEBUG_FRAME(...) response_sender.debug_frame(__VA_ARGS__)
+#define DEBUG_MESSAGE(...) g_response_sender.debug_message(__VA_ARGS__)
+#define DEBUG_FRAME(...) g_response_sender.debug_frame(__VA_ARGS__)
 #else
 #define DEBUG_MESSAGE(...)
 #define DEBUG_FRAME(...)

@@ -176,7 +176,7 @@ static void write_glyph_grayscale_q4(const glyph::Glyph& glyph, uint16_t x_start
 extern struct GlyphRGBAQ256PaletteRenderSettings {
     bool x_mirror;
     bool y_mirror;
-} glyph_rgba_q256_palette_render_settings;
+} g_glyph_rgba_q256_palette_render_settings;
 
 template <typename F>
 static void write_glyph_rgba_q256_palette(const glyph::Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, F background_colour_source) {
@@ -208,7 +208,7 @@ static void write_glyph_rgba_q256_palette(const glyph::Glyph& glyph, uint16_t x_
         } \
     }
 
-    const auto& settings = glyph_rgba_q256_palette_render_settings;
+    const auto& settings = g_glyph_rgba_q256_palette_render_settings;
     if (!settings.x_mirror && !settings.y_mirror) {
         uint16_t i = 0;
         for (uint8_t y = 0; y < height; y++) {

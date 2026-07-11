@@ -143,7 +143,7 @@ public:
     }
 
     void render_all() {
-        response_sender.send_render_status(true);
+        g_response_sender.send_render_status(true);
         if (m_render_mask.background) {
             render_background();
             m_printers.reset();
@@ -158,7 +158,7 @@ public:
         if (m_render_mask.wind_description) render_wind_description();
         if (m_render_mask.moon_description) render_moon_description();
         m_render_mask.set_all(false);
-        response_sender.send_render_status(false);
+        g_response_sender.send_render_status(false);
         DEBUG_FRAME("render_all: temperature={0}°C, humidity={1}%", m_temperature_celcius, m_humidity_percent);
     }
 
@@ -452,9 +452,9 @@ private:
         if (icon != nullptr) {
             const auto* glyph = icon->get_glyph();
             const bool is_x_mirrored = icon->is_horizontally_flipped;
-            glyph_rgba_q256_palette_render_settings.x_mirror = is_x_mirrored;
+            g_glyph_rgba_q256_palette_render_settings.x_mirror = is_x_mirrored;
             printer.print_glyph(glyph, background_colour);
-            glyph_rgba_q256_palette_render_settings.x_mirror = false;
+            g_glyph_rgba_q256_palette_render_settings.x_mirror = false;
             printer.print_char(' ', background_colour, get_glyph);
         }
         printer.print_string(description, background_colour, get_glyph);
@@ -462,4 +462,4 @@ private:
     }
 };
 
-extern App app;
+extern App g_app;

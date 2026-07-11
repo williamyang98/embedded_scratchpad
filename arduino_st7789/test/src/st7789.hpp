@@ -120,4 +120,4 @@ struct ST7789 {
     }
 };
 
-extern ST7789 st7789;
+extern ST7789 g_st7789;

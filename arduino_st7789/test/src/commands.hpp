@@ -64,13 +64,13 @@ public:
         const size_t length = cobs_decoder.get_decoded_length();
         if (length == 0) return;
         const bool success = parse_command(buffer, length);
-        response_sender.send_acknowledge(buffer[0], success);
+        g_response_sender.send_acknowledge(buffer[0], success);
     }
 private:
     bool parse_command(const uint8_t* buffer, const size_t length) {
         const auto header = static_cast<CommandHeader>(buffer[0]);
         if (header == CommandHeader::TRIGGER_RENDER) {
-            app.render_all();
+            g_app.render_all();
             return true;
         }
         if (header == CommandHeader::SET_TEMPERATURE) {
@@ -78,7 +78,7 @@ private:
             int16_t temperature = 0;
             temperature |= static_cast<int16_t>(buffer[1]) << 8;
             temperature |= static_cast<int16_t>(buffer[2]);
-            app.set_temperature(temperature);
+            g_app.set_temperature(temperature);
             return true;
         }
         if (header == CommandHeader::SET_HUMIDITY) {
@@ -86,7 +86,7 @@ private:
             uint16_t humidity = 0;
             humidity |= static_cast<uint16_t>(buffer[1]) << 8;
             humidity |= static_cast<uint16_t>(buffer[2]);
-            app.set_humidity(humidity);
+            g_app.set_humidity(humidity);
             return true;
         }
         if (header == CommandHeader::SET_WIND_KPH) {
@@ -94,7 +94,7 @@ private:
             uint16_t wind_kph = 0;
             wind_kph |= static_cast<uint16_t>(buffer[1]) << 8;
             wind_kph |= static_cast<uint16_t>(buffer[2]);
-            app.set_wind(wind_kph);
+            g_app.set_wind(wind_kph);
             return true;
         }
         if (header == CommandHeader::SET_TIME_24_HOUR) {
@@ -104,13 +104,13 @@ private:
             time_24_hour |= static_cast<uint16_t>(buffer[2]);
             const bool is_show_24_hour = buffer[3] != 0;
             const bool is_show_leading_zero = buffer[4] != 0;
-            app.set_time(time_24_hour);
-            app.set_time_show_24_hour(is_show_24_hour);
-            app.set_time_show_leading_zero(is_show_leading_zero);
+            g_app.set_time(time_24_hour);
+            g_app.set_time_show_24_hour(is_show_24_hour);
+            g_app.set_time_show_leading_zero(is_show_leading_zero);
             return true;
         }
         return false;
     }
 };
 
-extern CommandParser command_parser;
+extern CommandParser g_command_parser;

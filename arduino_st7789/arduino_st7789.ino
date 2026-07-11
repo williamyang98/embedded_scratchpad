@@ -1,9 +1,9 @@
 #include "./test/src/sketch.hpp"
 
-App app; // extern
-CommandParser command_parser; // extern
-ResponseSender response_sender; // extern
-GlyphRGBAQ256PaletteRenderSettings glyph_rgba_q256_palette_render_settings; // extern
+App g_app; // extern
+CommandParser g_command_parser; // extern
+ResponseSender g_response_sender; // extern
+GlyphRGBAQ256PaletteRenderSettings g_glyph_rgba_q256_palette_render_settings; // extern
 
 void setup(void) {
   sketch_setup();

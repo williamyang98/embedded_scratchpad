@@ -8,19 +8,19 @@ void init() {
 }
 
 void set_brightness(uint8_t brightness) {
-    st7789.set_brightness(brightness);
+    g_st7789.set_brightness(brightness);
 }
 
 void hardware_reset() {
-    st7789.hardware_reset();
+    g_st7789.hardware_reset();
 }
 
 void set_write_mode(bool x_mirror, bool y_mirror) {
-    st7789.set_write_mode(x_mirror, y_mirror);
+    g_st7789.set_write_mode(x_mirror, y_mirror);
 }
 
 void set_write_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uint16_t y_end) {
-    st7789.set_write_rect({
+    g_st7789.set_write_rect({
         .x_start = x_start,
         .x_end = x_end,
         .y_start = y_start,
@@ -29,15 +29,15 @@ void set_write_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uint16_t
 }
 
 void begin_write_pixel() {
-    st7789.begin_write_pixel();
+    g_st7789.begin_write_pixel();
 }
 
 void write_pixel(rgb565_t colour) {
-    st7789.write(colour);
+    g_st7789.write(colour);
 }
 
 void end_write_pixel() {
-    st7789.end_write_pixel();
+    g_st7789.end_write_pixel();
 }
 
 void fill_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uint16_t y_end, rgb565_t colour) {
