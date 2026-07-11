@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./serial.hpp"
+#include "./tft.hpp"
 #include "./app.hpp"
 #include "./commands.hpp"
 #include "./response.hpp"

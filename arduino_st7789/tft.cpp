@@ -127,7 +127,37 @@ void write_data_byte(uint8_t data) {
 
 };
 
-void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
+static struct {
+  bool x_mirror = false;
+  bool y_mirror = false;
+} write_mode;
+
+void tft::set_write_mode(bool x_mirror, bool y_mirror) {
+  write_mode.x_mirror = x_mirror;
+  write_mode.y_mirror = y_mirror;
+
+  // Section 9.1.28: Memory data access control
+  spi::write_command_byte(CMD.MEMORY_DATA_ACCESS_CONTROL);
+  // D7=0: top to bottom
+  // D6=0: left to right
+  // D5=0: normal mode (portrait vs landscape mode)
+  // D4=0: LCD refreshes from top to bottom
+  // D3=0: RGB instead of BGR
+  // D2=0: LCD refreshes from left to right
+  // D1:D0=x: unused
+  uint8_t v = 0b00000000;
+  if (!x_mirror) v |= 0b01000000;
+  if (!y_mirror) v |= 0b10000000;
+  spi::write_data_byte(v);
+}
+
+static void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
+  if (write_mode.x_mirror) {
+    const uint16_t new_x_start = tft::SCREEN_WIDTH-x_end-1;
+    const uint16_t new_x_end = tft::SCREEN_WIDTH-x_start-1;
+    x_start = new_x_start;
+    x_end = new_x_end;
+  }
   // Section 9.1.20: Column address set
   spi::write_command_byte(CMD.COLUMN_ADDRESS_SET);
   spi::set_mode(spi::Mode::DATA);
@@ -139,7 +169,13 @@ void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
   spi::chip_select(false);
 }
 
-void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
+static void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
+  if (write_mode.y_mirror) {
+    const uint16_t new_y_start = tft::SCREEN_HEIGHT-y_end-1;
+    const uint16_t new_y_end = tft::SCREEN_HEIGHT-y_start-1;
+    y_start = new_y_start;
+    y_end = new_y_end;
+  }
   // Section 9.1.21: Row address set
   y_start += tft::ADDRESS_Y_OFFSET;
   y_end += tft::ADDRESS_Y_OFFSET;
@@ -194,18 +230,7 @@ void tft::init() {
   // Section 8.8.3: 8-bit data bus for 16-bit/pixel (RGB 5-6-5-bit input), 65K-Colors
   delay(10);
   
-  // Section 9.1.28: Memory data access control
-  spi::write_command_byte(CMD.MEMORY_DATA_ACCESS_CONTROL);
-  // D7=0: top to bottom
-  // D6=0: left to right
-  // D5=0: normal mode (portrait vs landscape mode)
-  // D4=0: LCD refreshes from top to bottom
-  // D3=0: RGB instead of BGR
-  // D2=0: LCD refreshes from left to right
-  // D1:D0=x: unused
-  spi::write_data_byte(0b11000000);
-
-  
+  tft::set_write_mode(false, false);
   tft::set_write_rect(0, SCREEN_WIDTH-1, 0, SCREEN_HEIGHT-1);
 
   spi::write_command_byte(CMD.DISPLAY_INVERSION_ON);

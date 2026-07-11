@@ -29,6 +29,8 @@ struct ST7789 {
     std::vector<rgb565_t> m_buffer;
     Rect m_rect;
     Cursor m_cursor;
+    bool m_x_mirror = false;
+    bool m_y_mirror = false;
 
     ST7789(uint16_t width, uint16_t height)
     : m_width(width), m_height(height)
@@ -55,6 +57,11 @@ struct ST7789 {
 
     void hardware_reset() {
         m_is_hardware_reset = 1;
+    }
+
+    void set_write_mode(bool x_mirror, bool y_mirror) {
+        m_x_mirror = x_mirror;
+        m_y_mirror = y_mirror;
     }
 
     void set_write_rect(Rect rect) {
@@ -89,9 +96,18 @@ struct ST7789 {
     void write(rgb565_t pixel) {
         if (m_mode != Mode::DATA) return;
 
+        uint16_t real_cursor_y = m_cursor.y;
+        uint16_t real_cursor_x = m_cursor.x;
+        if (m_x_mirror) {
+            real_cursor_x = m_width-m_cursor.x-1;
+        }
+        if (m_y_mirror) {
+            real_cursor_y = m_height-m_cursor.y-1;
+        }
         const uint32_t offset =
-            static_cast<uint32_t>(m_cursor.y)*static_cast<uint32_t>(m_width) +
-            static_cast<uint32_t>(m_cursor.x);
+            static_cast<uint32_t>(real_cursor_y)*static_cast<uint32_t>(m_width) +
+            static_cast<uint32_t>(real_cursor_x);
+
         m_cursor.x += 1;
         if (m_cursor.x > m_rect.x_end) {
             m_cursor.x = m_rect.x_start;

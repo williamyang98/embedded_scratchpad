@@ -9,6 +9,7 @@
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
 #include "../scripts/glyphs/icons.hpp"
+#include "./moon_phases.hpp"
 
 namespace weather_icons = icons::large;
 namespace mini_icons = icons::small;
@@ -69,6 +70,7 @@ private:
         HOT = 3,
     } m_background_state;
     weather_icons::Icon m_weather_icon_state;
+    MoonPhase m_moon_phase;
     struct {
         bool background;
         bool time;
@@ -113,6 +115,7 @@ public:
         m_background_colour.hot.delta_colour = create_rgb565_bits(2,1,1);
         m_background_state = BackgroundState::FREEZING;
         m_weather_icon_state = weather_icons::Icon::SUNNY;
+        m_moon_phase = MoonPhase::NEW_MOON;
 
         m_x_margin = 10;
         m_y_margin = 10;
@@ -164,7 +167,7 @@ public:
         m_render_mask.weather_description |= is_changed;
         m_temperature_celcius = temperature_celcius;
         update_background_state();
-        update_weather_icon_state();
+        update_weather_icon();
     }
 
     void set_humidity(uint16_t humidity_percent) {
@@ -172,14 +175,14 @@ public:
         m_render_mask.humidity |= is_changed;
         m_render_mask.humidity_description |= is_changed;
         m_humidity_percent = humidity_percent;
-        update_weather_icon_state();
     }
 
     void set_time(uint16_t time_24_hour) {
+        time_24_hour = time_24_hour % 2400;
         const bool is_changed = m_time_24_hour != time_24_hour;
         m_render_mask.time |= is_changed;
         m_time_24_hour = time_24_hour;
-        update_weather_icon_state();
+        update_moon_phase();
     }
 
     void set_time_show_24_hour(bool is_show_24_hour) {
@@ -198,7 +201,6 @@ public:
         const bool is_changed = m_wind_kph != wind_kph;
         m_render_mask.wind_description |= is_changed;
         m_wind_kph = wind_kph;
-        update_weather_icon_state();
     }
 private:
     RadialBackgroundColour& get_background_colour() {
@@ -228,27 +230,48 @@ private:
         return false;
     }
 
-    bool update_weather_icon_state() {
+    bool update_weather_icon() {
         weather_icons::Icon new_state = m_weather_icon_state;
-        if (m_time_24_hour < 600) {
-            new_state = weather_icons::Icon::FULL_MOON;
-        } else if (m_wind_kph > 300) {
-            new_state = weather_icons::Icon::WIND;
-        } else if (m_humidity_percent > 400) {
-            new_state = weather_icons::Icon::WET;
-        } else if (m_temperature_celcius < 0)  {
+        if (m_temperature_celcius < 0)  {
             new_state = weather_icons::Icon::WINTER;
+        } else if (m_temperature_celcius < 100)  {
+            new_state = weather_icons::Icon::LIGHTNING_STORM;
         } else if (m_temperature_celcius < 200) {
-            new_state = weather_icons::Icon::PARTLY_CLOUDY;
+            new_state = weather_icons::Icon::HEAVY_RAIN;
         } else if (m_temperature_celcius < 300) {
-            new_state = weather_icons::Icon::SPRING;
+            new_state = weather_icons::Icon::PARTLY_CLOUDY;
         } else {
             new_state = weather_icons::Icon::SUNNY;
         }
         const bool is_changed = new_state != m_weather_icon_state;
         m_render_mask.weather_icon |= is_changed;
         m_weather_icon_state = new_state;
-        return false;
+        return is_changed;
+    }
+
+    bool update_moon_phase() {
+        MoonPhase new_phase = m_moon_phase;
+        if (m_time_24_hour < 300) {
+            new_phase = MoonPhase::NEW_MOON;
+        } else if (m_time_24_hour < 600) {
+            new_phase = MoonPhase::WAXING_CRESCENT;
+        } else if (m_time_24_hour < 900) {
+            new_phase = MoonPhase::FIRST_QUARTER;
+        } else if (m_time_24_hour < 1200) {
+            new_phase = MoonPhase::WAXING_GIBBOUS;
+        } else if (m_time_24_hour < 1500) {
+            new_phase = MoonPhase::FULL_MOON;
+        } else if (m_time_24_hour < 1800) {
+            new_phase = MoonPhase::WANING_GIBBOUS;
+        } else if (m_time_24_hour < 2100) {
+            new_phase = MoonPhase::THIRD_QUARTER;
+        } else {
+            new_phase = MoonPhase::WANING_CRESCENT;
+        }
+        const bool is_changed = new_phase != m_moon_phase;
+        m_render_mask.moon_description |= is_changed;
+        m_moon_phase = new_phase;
+        return is_changed;
     }
 
     void render_background() {
@@ -397,7 +420,11 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.wind_description;
         printer.x_start = m_x_margin;
-        printer.print_string(FLASH_STRING("WIND: "), background_colour, get_glyph);
+        const auto* icon = mini_icons::get_icon(mini_icons::Icon::WIND);
+        if (icon != nullptr) {
+            printer.print_glyph(icon, background_colour);
+            printer.print_char(' ', background_colour, get_glyph);
+        }
         const auto digits = Digits(m_wind_kph);
         int8_t leading_non_zero_digit_index = digits.leading_non_zero_digit_index;
         if (leading_non_zero_digit_index < 1) leading_non_zero_digit_index = 1;
@@ -416,7 +443,18 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.moon_description;
         printer.x_start = m_x_margin;
-        printer.print_string(FLASH_STRING("MOON: HALF MOON"), background_colour, get_glyph);
+
+        const MoonPhaseIcon* icon = get_moon_phase_icon(m_moon_phase);
+        const FlashMemory<char>* description = get_moon_phase_description(m_moon_phase);
+        if (icon != nullptr) {
+            const auto* glyph = icon->get_glyph();
+            const bool is_x_mirrored = icon->is_horizontally_flipped;
+            tft::set_write_mode(is_x_mirrored, false);
+            printer.print_glyph(glyph, background_colour);
+            tft::set_write_mode(false, false);
+            printer.print_char(' ', background_colour, get_glyph);
+        }
+        printer.print_string(description, background_colour, get_glyph);
         printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 };
