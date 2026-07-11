@@ -10,6 +10,7 @@
 #include "../glyphs/small_font.hpp"
 #include "../glyphs/icons.hpp"
 #include "./moon_phases.hpp"
+#include "./wind_speeds.hpp"
 #include "./response.hpp"
 
 namespace weather_icons = icons::large;
@@ -437,6 +438,12 @@ private:
             printer.print_char('0'+digit, background_colour, get_glyph);
         }
         printer.print_string(FLASH_STRING("KPH"), background_colour, get_glyph);
+        const WindCategory category = get_wind_speed_category(m_wind_kph);
+        const auto* wind_description = get_wind_speed_description(category);
+        if (wind_description != nullptr) {
+            printer.print_char(' ', background_colour, get_glyph);
+            printer.print_string(wind_description, background_colour, get_glyph);
+        }
         printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 
