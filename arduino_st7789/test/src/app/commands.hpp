@@ -6,10 +6,15 @@
 
 enum class CommandHeader: uint8_t {
     TRIGGER_RENDER = 0x00,
+    // weather page
     SET_TEMPERATURE = 0x01,
     SET_HUMIDITY = 0x02,
     SET_TIME_24_HOUR = 0x03,
     SET_WIND_KPH = 0x04,
+    SET_WEATHER_ICON = 0x05,
+    SET_LOCATION = 0x06,
+    SET_WEATHER_DESCRIPTION = 0x07,
+    SET_MOON_PHASE = 0x08,
 };
 
 class CobsDecoder {
@@ -107,6 +112,32 @@ private:
             g_app.set_time(time_24_hour);
             g_app.set_time_show_24_hour(is_show_24_hour);
             g_app.set_time_show_leading_zero(is_show_leading_zero);
+            return true;
+        }
+        if (header == CommandHeader::SET_WEATHER_ICON) {
+            if (length != 2) return false;
+            const WeatherIcon icon = static_cast<WeatherIcon>(buffer[1]);
+            if (get_weather_icon(icon) == nullptr) return false;
+            g_app.set_weather_icon(icon);
+            return true;
+        }
+        if (header == CommandHeader::SET_LOCATION) {
+            const size_t string_length = length-1;
+            const char* location = reinterpret_cast<const char*>(&buffer[1]);
+            g_app.set_location(location, string_length);
+            return true;
+        }
+        if (header == CommandHeader::SET_WEATHER_DESCRIPTION) {
+            const size_t string_length = length-1;
+            const char* weather_description = reinterpret_cast<const char*>(&buffer[1]);
+            g_app.set_weather_description(weather_description, string_length);
+            return true;
+        }
+        if (header == CommandHeader::SET_MOON_PHASE) {
+            if (length != 2) return false;
+            const MoonPhase phase = static_cast<MoonPhase>(buffer[1]);
+            if (get_moon_phase_icon(phase) == nullptr) return false;
+            g_app.set_moon_phase(phase);
             return true;
         }
         return false;

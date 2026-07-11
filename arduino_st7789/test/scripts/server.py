@@ -8,6 +8,7 @@ import json
 from aiohttp import web, WSMsgType
 from devices import Device, ProcessDevice, SerialDevice
 from response_parser import ResponseHandler
+from command_creator import WeatherIcon, MoonPhase
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,22 @@ class CommandParser:
             elif _type == "set_wind_kph":
                 wind_kph = get_field("wind_kph", int)
                 await run_blocking(self.event_loop, lambda: self.command_sender.set_wind_kph(wind_kph))
+            elif _type == "set_location":
+                location = get_field("location", str)
+                location = location.upper()
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_location(location))
+            elif _type == "set_weather_description":
+                description = get_field("description", str)
+                description = description.upper()
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_weather_description(description))
+            elif _type == "set_weather_icon":
+                icon = get_field("icon", int)
+                icon = WeatherIcon(icon)
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_weather_icon(icon))
+            elif _type == "set_moon_phase":
+                phase = get_field("phase", int)
+                phase = MoonPhase(phase)
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_moon_phase(phase))
             else:
                 logger.error(f"Unhandled command type={_type}, command={command}")
         except Exception as ex:

@@ -135,6 +135,17 @@ struct LeftToRightPrinter {
         return true;
     };
 
+    template <typename F, typename G>
+    bool print_string(const char* str, F background_colour_source, G glyph_source) {
+        if (str == nullptr) return false;
+        for (uint8_t i = 0; i < 255; i++) {
+            const uint8_t c = str[i];
+            if (c == 0) break;
+            print_char(c, background_colour_source, glyph_source);
+        }
+        return true;
+    };
+
     template <typename F>
     bool print_nothing(uint16_t width, uint16_t height, F background_colour_source) {
         const uint16_t x_end = x_start+width-1;
