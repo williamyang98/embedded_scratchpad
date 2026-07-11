@@ -6,6 +6,7 @@
 #include "./colour_functions.hpp"
 #include "./pgmspace.h"
 #include "./response.hpp"
+#include "./font.hpp"
 #include "../scripts/glyphs/large_font.hpp"
 #include "../scripts/glyphs/small_font.hpp"
 #include "../scripts/glyphs/icons.hpp"
@@ -356,9 +357,11 @@ private:
         const auto get_glyph = &font::get_glyph;
         auto& printer = m_printers.weather_description;
         printer.x_start = m_x_margin;
-        const auto& icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
-        printer.print_glyph(icon, background_colour);
-        printer.print_char(' ', background_colour, get_glyph);
+        const auto* icon = mini_icons::get_icon(mini_icons::Icon::LOCATION_PIN);
+        if (icon != nullptr) {
+            printer.print_glyph(icon, background_colour);
+            printer.print_char(' ', background_colour, get_glyph);
+        }
         const FlashMemory<char>* description = nullptr;
         if (m_temperature_celcius < 0) {
             description = FLASH_STRING("HEAVY SNOWSTORM");
@@ -449,9 +452,9 @@ private:
         if (icon != nullptr) {
             const auto* glyph = icon->get_glyph();
             const bool is_x_mirrored = icon->is_horizontally_flipped;
-            tft::set_write_mode(is_x_mirrored, false);
+            glyph_rgba_q256_palette_render_settings.x_mirror = is_x_mirrored;
             printer.print_glyph(glyph, background_colour);
-            tft::set_write_mode(false, false);
+            glyph_rgba_q256_palette_render_settings.x_mirror = false;
             printer.print_char(' ', background_colour, get_glyph);
         }
         printer.print_string(description, background_colour, get_glyph);

@@ -127,15 +127,7 @@ void write_data_byte(uint8_t data) {
 
 };
 
-static struct {
-  bool x_mirror = false;
-  bool y_mirror = false;
-} write_mode;
-
 void tft::set_write_mode(bool x_mirror, bool y_mirror) {
-  write_mode.x_mirror = x_mirror;
-  write_mode.y_mirror = y_mirror;
-
   // Section 9.1.28: Memory data access control
   spi::write_command_byte(CMD.MEMORY_DATA_ACCESS_CONTROL);
   // D7=0: top to bottom
@@ -152,12 +144,6 @@ void tft::set_write_mode(bool x_mirror, bool y_mirror) {
 }
 
 static void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
-  if (write_mode.x_mirror) {
-    const uint16_t new_x_start = tft::SCREEN_WIDTH-x_end-1;
-    const uint16_t new_x_end = tft::SCREEN_WIDTH-x_start-1;
-    x_start = new_x_start;
-    x_end = new_x_end;
-  }
   // Section 9.1.20: Column address set
   spi::write_command_byte(CMD.COLUMN_ADDRESS_SET);
   spi::set_mode(spi::Mode::DATA);
@@ -170,12 +156,6 @@ static void cmd_set_column_address(uint16_t x_start, uint16_t x_end) {
 }
 
 static void cmd_set_row_address(uint16_t y_start, uint16_t y_end) {
-  if (write_mode.y_mirror) {
-    const uint16_t new_y_start = tft::SCREEN_HEIGHT-y_end-1;
-    const uint16_t new_y_end = tft::SCREEN_HEIGHT-y_start-1;
-    y_start = new_y_start;
-    y_end = new_y_end;
-  }
   // Section 9.1.21: Row address set
   y_start += tft::ADDRESS_Y_OFFSET;
   y_end += tft::ADDRESS_Y_OFFSET;

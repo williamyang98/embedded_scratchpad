@@ -173,6 +173,11 @@ static void write_glyph_grayscale_q4(const glyph::Glyph& glyph, uint16_t x_start
     tft::end_write_pixel();
 }
 
+extern struct GlyphRGBAQ256PaletteRenderSettings {
+    bool x_mirror;
+    bool y_mirror;
+} glyph_rgba_q256_palette_render_settings;
+
 template <typename F>
 static void write_glyph_rgba_q256_palette(const glyph::Glyph& glyph, uint16_t x_start, uint16_t y_start, rgb565_t text_colour, F background_colour_source) {
     const uint8_t width = glyph.width;
@@ -187,22 +192,62 @@ static void write_glyph_rgba_q256_palette(const glyph::Glyph& glyph, uint16_t x_
 
     tft::set_write_rect(x_start, x_end, y_start, y_end);
     tft::begin_write_pixel();
-    const uint16_t total_pixels = static_cast<uint8_t>(width)*static_cast<uint8_t>(height);
-    for (uint16_t i = 0; i < total_pixels; i++) {
-        const uint8_t palette_index = pgm_read_byte(glyph.data + i);
-        if (palette_index == icons::TRANSPARENCY_PALETTE_VALUE) {
-            const rgb565_t background_colour = background_colour_source.get_colour();
-            background_colour_source.advance_cursor();
-            tft::write_pixel(background_colour);
-        } else if (palette_index == icons::CHROMA_KEY_PALETTE_VALUE) {
-            background_colour_source.advance_cursor();
-            tft::write_pixel(text_colour);
-        } else {
-            const rgb565_t icon_colour = pgm_read_word(icons::RGB565_COLOUR_PALETTE + palette_index);
-            background_colour_source.advance_cursor();
-            tft::write_pixel(icon_colour);
+
+    #define push_pixel(palette_index) { \
+        if (palette_index == icons::TRANSPARENCY_PALETTE_VALUE) { \
+            const rgb565_t background_colour = background_colour_source.get_colour(); \
+            background_colour_source.advance_cursor(); \
+            tft::write_pixel(background_colour); \
+        } else if (palette_index == icons::CHROMA_KEY_PALETTE_VALUE) { \
+            background_colour_source.advance_cursor(); \
+            tft::write_pixel(text_colour); \
+        } else { \
+            const rgb565_t icon_colour = pgm_read_word(icons::RGB565_COLOUR_PALETTE + palette_index); \
+            background_colour_source.advance_cursor(); \
+            tft::write_pixel(icon_colour); \
+        } \
+    }
+
+    const auto& settings = glyph_rgba_q256_palette_render_settings;
+    if (!settings.x_mirror && !settings.y_mirror) {
+        uint16_t i = 0;
+        for (uint8_t y = 0; y < height; y++) {
+            for (uint8_t x = 0; x < width; x++) {
+                const uint8_t palette_index = pgm_read_byte(glyph.data + i);
+                push_pixel(palette_index);
+                i++;
+            }
+        }
+    } else if (settings.x_mirror && !settings.y_mirror) {
+        uint16_t i = width-1;
+        for (uint8_t y = 0; y < height; y++) {
+            for (uint8_t x = 0; x < width; x++) {
+                const uint8_t palette_index = pgm_read_byte(glyph.data + i - x);
+                push_pixel(palette_index);
+            }
+            i += width;
+        }
+    } else if (!settings.x_mirror && settings.y_mirror) {
+        uint16_t i = static_cast<uint16_t>(width)*static_cast<uint16_t>(height-1);
+        for (uint8_t y = 0; y < height; y++) {
+            for (uint8_t x = 0; x < width; x++) {
+                const uint8_t palette_index = pgm_read_byte(glyph.data + i + x);
+                push_pixel(palette_index);
+            }
+            i -= width;
+        }
+    } else {
+        uint16_t i = (static_cast<uint16_t>(width)*static_cast<uint16_t>(height))-1;
+        for (uint8_t y = 0; y < height; y++) {
+            for (uint8_t x = 0; x < width; x++) {
+                const uint8_t palette_index = pgm_read_byte(glyph.data + i);
+                push_pixel(palette_index);
+                i--;
+            }
         }
     }
+
+    #undef push_pixel
     tft::end_write_pixel();
 }
 

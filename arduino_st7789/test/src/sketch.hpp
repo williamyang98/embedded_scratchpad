@@ -12,6 +12,9 @@ static void sketch_setup() {
     response_sender.send_message(FLASH_STRING("Initating ST7789 sketch"));
     tft::init();
     tft::set_brightness(50);
+    tft::set_write_mode(false, false);
+    glyph_rgba_q256_palette_render_settings.x_mirror = false;
+    glyph_rgba_q256_palette_render_settings.y_mirror = false;
     app.render_all();
 }
 
