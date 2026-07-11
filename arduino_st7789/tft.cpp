@@ -2,6 +2,17 @@
 #include <avr/io.h>
 #include <Arduino.h>
 
+// Section 8.4.1: Pin description
+// 4 line serial interface I
+constexpr struct {
+  int8_t CHIP_SELECT = 10; // pull low to chip select 
+  int8_t RESET = 9; // pull low to reset display
+  int8_t DATA_COMMAND = 8; // low = command, high = data
+  int8_t BACKLIGHT = 6; // high to enable backlight
+  int8_t MOSI = 11; // spi tft as slave in
+  int8_t SCLK = 13; // spi clock
+} PIN;
+
 template <int N>
 inline static void nop() {
   static_assert(N > 0);
@@ -61,17 +72,6 @@ constexpr struct {
   uint8_t READ_ID2 = 0xDB;
   uint8_t READ_ID3 = 0xDC;
 } CMD;
-
-// Section 8.4.1: Pin description
-// 4 line serial interface I
-constexpr struct {
-  int8_t CHIP_SELECT = 10; // pull low to chip select 
-  int8_t RESET = 9; // pull low to reset display
-  int8_t DATA_COMMAND = 8; // low = command, high = data
-  int8_t BACKLIGHT = 6; // high to enable backlight
-  int8_t MOSI = 11; // spi tft as slave in
-  int8_t SCLK = 13; // spi clock
-} PIN;
 
 namespace spi {
 
