@@ -286,6 +286,7 @@ private:
             const bool is_pm = time >= 1200;
             printer.print_string(is_pm ? FLASH_STRING("PM") : FLASH_STRING("AM"), background_colour, get_glyph);
             if (time >= 1300) time -= 1200; // 13:00 -> 1:00PM
+            else if (time < 100) time += 1200; // 00:00 -> 12:00AM
         }
         const auto digits = Digits(time);
         printer.print_char('0'+digits[0], background_colour, get_glyph);
