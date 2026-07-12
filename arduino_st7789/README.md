@@ -1,5 +1,5 @@
 # Introduction
-A small test harness to simulate the st7789 display and visualise it in the browser.
+Project involving the st7789 display using it with an Arduino and simulating it in a test environment
 
 ![./docs/screenshot.png](./docs/screenshot.png)
 
