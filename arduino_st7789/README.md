@@ -8,8 +8,7 @@ A small test harness to simulate the st7789 display and visualise it in the brow
 2. Create virtual environment: ```python -m venv venv```
 3. Activate virtual environmetn: ```source ./venv/scripts/activate```
 4. Install python packages: ```pip install -r requirements.txt```
-5. Activate python environment
-6. Generate font glyphs: ```cd scripts && ./render_all_glyphs.sh```
+5. Generate font glyphs: ```./render_all_glyphs.sh```
 
 ## Testing application locally
 ### 1. Build application

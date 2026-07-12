@@ -210,9 +210,9 @@ def main():
     font_filename = os.path.basename(args.font)
     font_basename = os.path.splitext(font_filename)[0]
     formatted_namespace = get_formatted_namespace(font_basename)
-    output = args.output
-    if output == None:
-        output = os.path.join("../src/glyphs", f"{formatted_namespace}.hpp")
+    output_filepath = args.output
+    if output_filepath == None:
+        output_filepath = os.path.join("../src/glyphs", f"{formatted_namespace}.hpp")
     namespace = args.namespace
     if namespace == None:
         namespace = formatted_namespace
@@ -237,8 +237,10 @@ def main():
     font_glyphs = FontGlyphs(namespace, font, glyphs, args.encoding)
     font_glyphs.print_stats()
     cpp_header = font_glyphs.get_cpp_string()
-    print(f"Writing c++ header to: {output}")
-    with open(output, "w") as fp:
+    print(f"Writing c++ header to: {output_filepath}")
+    output_dirpath = os.path.dirname(output_filepath)
+    os.makedirs(output_dirpath, exist_ok=True)
+    with open(output_filepath, "w") as fp:
         fp.write(cpp_header)
 
 if __name__ == "__main__":

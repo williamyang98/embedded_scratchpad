@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <vector>
-#include "../graphics/rgb565.hpp"
+#include "../src/graphics/rgb565.hpp"
 
 struct ST7789 {
     struct Rect {

@@ -233,8 +233,11 @@ namespace {args.namespace} {{
 }};
 """
 
-    print(f"Writing c++ header to: {args.output}")
-    with open(args.output, "w") as fp:
+    output_filepath = args.output
+    print(f"Writing c++ header to: {output_filepath}")
+    output_dirpath = os.path.dirname(output_filepath)
+    os.makedirs(output_dirpath, exist_ok=True)
+    with open(output_filepath, "w") as fp:
         fp.write(header)
 
 if __name__ == "__main__":

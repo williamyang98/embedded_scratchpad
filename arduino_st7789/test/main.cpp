@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "./sketch.hpp"
+#include "../src/sketch.hpp"
 
 HardwareSerial Serial; // extern
 ST7789 g_st7789(tft::SCREEN_WIDTH, tft::SCREEN_HEIGHT); // extern

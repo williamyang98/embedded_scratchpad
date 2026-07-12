@@ -1,4 +1,4 @@
-#include "./test/src/sketch.hpp"
+#include "./src/sketch.hpp"
 
 App g_app; // extern
 CommandParser g_command_parser; // extern
