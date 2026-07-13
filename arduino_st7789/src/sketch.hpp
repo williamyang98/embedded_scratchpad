@@ -16,6 +16,7 @@ static void sketch_setup() {
     g_glyph_rgba_q256_palette_render_settings.x_mirror = false;
     g_glyph_rgba_q256_palette_render_settings.y_mirror = false;
     g_app.render_all();
+    g_app.set_page(AppPage::WEATHER_PAGE);
 }
 
 static void sketch_loop() {

@@ -5,6 +5,39 @@
 #include "../hardware/tft.hpp"
 #include "../hardware/pgmspace.h"
 
+template <typename G>
+static uint16_t calculate_text_width(const char* str, G glyph_source) {
+    uint16_t width = 0;
+    if (str == nullptr) return width;
+    for (uint8_t i = 0; i < 255; i++) {
+        const uint8_t c = str[i];
+        if (c == 0) break;
+        const FlashMemory<glyph::Glyph>* glyph_ptr = glyph_source(c);
+        if (glyph_ptr == nullptr) continue;
+        glyph::Glyph glyph;
+        memcpy_P(&glyph, glyph_ptr, sizeof(glyph));
+        width += glyph.width;
+    }
+    return width;
+}
+
+template <typename G>
+static uint16_t calculate_text_width(const FlashMemory<char>* flash_str, G glyph_source) {
+    uint16_t width = 0;
+    if (flash_str == nullptr) return width;
+    const char* str = reinterpret_cast<const char*>(flash_str);
+    for (uint8_t i = 0; i < 255; i++) {
+        const uint8_t c = pgm_read_byte(str + i);
+        if (c == 0) break;
+        const FlashMemory<glyph::Glyph>* glyph_ptr = glyph_source(c);
+        if (glyph_ptr == nullptr) continue;
+        glyph::Glyph glyph;
+        memcpy_P(&glyph, glyph_ptr, sizeof(glyph));
+        width += glyph.width;
+    }
+    return width;
+}
+
 struct RightToLeftPrinter {
     uint16_t prev_x_end;
     uint16_t x_end;

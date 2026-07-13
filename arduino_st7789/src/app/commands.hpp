@@ -15,6 +15,8 @@ enum class CommandHeader: uint8_t {
     SET_LOCATION = 0x06,
     SET_WEATHER_DESCRIPTION = 0x07,
     SET_MOON_PHASE = 0x08,
+    // set page
+    SET_PAGE = 0xFF,
 };
 
 class CobsDecoder {
@@ -74,8 +76,17 @@ public:
 private:
     bool parse_command(const uint8_t* buffer, const size_t length) {
         const auto header = static_cast<CommandHeader>(buffer[0]);
+        WeatherPage& weather_page = g_app.get_weather_page();
         if (header == CommandHeader::TRIGGER_RENDER) {
             g_app.render_all();
+            return true;
+        }
+        if (header == CommandHeader::SET_PAGE) {
+            if (length != 2) return false;
+            const uint8_t page_index = buffer[1];
+            if (page_index >= TOTAL_APP_PAGES) return false;
+            const AppPage page = static_cast<AppPage>(buffer[1]);
+            g_app.set_page(page);
             return true;
         }
         if (header == CommandHeader::SET_TEMPERATURE) {
@@ -83,7 +94,7 @@ private:
             int16_t temperature = 0;
             temperature |= static_cast<int16_t>(buffer[1]) << 8;
             temperature |= static_cast<int16_t>(buffer[2]);
-            g_app.set_temperature(temperature);
+            weather_page.set_temperature(temperature);
             return true;
         }
         if (header == CommandHeader::SET_HUMIDITY) {
@@ -91,7 +102,7 @@ private:
             uint16_t humidity = 0;
             humidity |= static_cast<uint16_t>(buffer[1]) << 8;
             humidity |= static_cast<uint16_t>(buffer[2]);
-            g_app.set_humidity(humidity);
+            weather_page.set_humidity(humidity);
             return true;
         }
         if (header == CommandHeader::SET_WIND_KPH) {
@@ -99,7 +110,7 @@ private:
             uint16_t wind_kph = 0;
             wind_kph |= static_cast<uint16_t>(buffer[1]) << 8;
             wind_kph |= static_cast<uint16_t>(buffer[2]);
-            g_app.set_wind(wind_kph);
+            weather_page.set_wind(wind_kph);
             return true;
         }
         if (header == CommandHeader::SET_TIME_24_HOUR) {
@@ -109,35 +120,35 @@ private:
             time_24_hour |= static_cast<uint16_t>(buffer[2]);
             const bool is_show_24_hour = buffer[3] != 0;
             const bool is_show_leading_zero = buffer[4] != 0;
-            g_app.set_time(time_24_hour);
-            g_app.set_time_show_24_hour(is_show_24_hour);
-            g_app.set_time_show_leading_zero(is_show_leading_zero);
+            weather_page.set_time(time_24_hour);
+            weather_page.set_time_show_24_hour(is_show_24_hour);
+            weather_page.set_time_show_leading_zero(is_show_leading_zero);
             return true;
         }
         if (header == CommandHeader::SET_WEATHER_ICON) {
             if (length != 2) return false;
             const WeatherIcon icon = static_cast<WeatherIcon>(buffer[1]);
             if (get_weather_icon(icon) == nullptr) return false;
-            g_app.set_weather_icon(icon);
+            weather_page.set_weather_icon(icon);
             return true;
         }
         if (header == CommandHeader::SET_LOCATION) {
             const size_t string_length = length-1;
             const char* location = reinterpret_cast<const char*>(&buffer[1]);
-            g_app.set_location(location, string_length);
+            weather_page.set_location(location, string_length);
             return true;
         }
         if (header == CommandHeader::SET_WEATHER_DESCRIPTION) {
             const size_t string_length = length-1;
             const char* weather_description = reinterpret_cast<const char*>(&buffer[1]);
-            g_app.set_weather_description(weather_description, string_length);
+            weather_page.set_weather_description(weather_description, string_length);
             return true;
         }
         if (header == CommandHeader::SET_MOON_PHASE) {
             if (length != 2) return false;
             const MoonPhase phase = static_cast<MoonPhase>(buffer[1]);
             if (get_moon_phase_icon(phase) == nullptr) return false;
-            g_app.set_moon_phase(phase);
+            weather_page.set_moon_phase(phase);
             return true;
         }
         return false;
