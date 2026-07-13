@@ -10,6 +10,7 @@ import requests
 import ephem
 import math
 import functools
+import threading
 from datetime import datetime
 from devices import Device, ProcessDevice, SerialDevice
 from response_parser import ResponseHandler
@@ -18,15 +19,38 @@ from wmo_weather_codes import WMO_WEATHER_CODES
 
 logger = logging.getLogger(__name__)
 
+class RenderFence:
+    def __init__(self, initial_is_busy=False):
+        self.cv = threading.Condition()
+        self.is_busy = initial_is_busy
+
+    def wait_not_busy(self):
+        self.cv.acquire()
+        while self.is_busy:
+            logger.info("Waiting for render to finish")
+            self.cv.wait()
+        self.cv.release()
+
+    def set_is_busy(self, is_busy):
+        self.cv.acquire()
+        is_changed = self.is_busy != is_busy
+        self.is_busy = is_busy
+        if is_changed:
+            self.cv.notify_all()
+        self.cv.release()
+
+    def close(self):
+        self.set_is_busy(False)
+
 class CustomResponseHandler(ResponseHandler):
-    def __init__(self):
-        pass
+    def __init__(self, render_fence):
+        self.render_fence = render_fence
 
     def acknowledge_command(self, header, is_success):
         pass
 
     def render_status(self, is_busy):
-        pass
+        self.render_fence.set_is_busy(is_busy)
 
     def log_message(self, message):
         pass
@@ -74,9 +98,18 @@ def trigger_every(n, is_immediate=True):
         return wrapper
     return decorator
 
+
+def wait_render_fence(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self.render_fence.wait_not_busy()
+        return func(self, *args, **kwargs)
+    return wrapper
+
 class Server:
-    def __init__(self, device, openmeteo_url, location):
+    def __init__(self, device, render_fence, openmeteo_url, location):
         self.device = device
+        self.render_fence = render_fence
         self.openmeteo_url = openmeteo_url
         self.command_sender = self.device.get_command_sender()
         self.location = location
@@ -87,7 +120,7 @@ class Server:
             self.update_time()
             self.update_weather()
             self.update_moon()
-            self.command_sender.trigger_render()
+            self.trigger_render()
             self.wait_until_next_minute()
 
     def wait_until_next_minute(self):
@@ -97,10 +130,12 @@ class Server:
         time.sleep(delay)
 
     @graceful_fail
+    @wait_render_fence
     def update_location(self):
         self.command_sender.set_location(self.location.upper())
 
     @graceful_fail
+    @wait_render_fence
     def update_time(self):
         now = datetime.now()
         time_24_hour = now.hour*100 + now.minute
@@ -108,6 +143,7 @@ class Server:
 
     @trigger_every(60)
     @graceful_fail
+    @wait_render_fence
     def update_weather(self):
         response = requests.get(self.openmeteo_url)
         if response.status_code != 200:
@@ -146,6 +182,7 @@ class Server:
 
     @trigger_every(60)
     @graceful_fail
+    @wait_render_fence
     def update_moon(self):
         date = ephem.Date(datetime.now())
         next_new_moon = ephem.next_new_moon(date)
@@ -156,6 +193,11 @@ class Server:
         phase = MoonPhase(phase_index)
         self.command_sender.set_moon_phase(phase)
 
+    @graceful_fail
+    @wait_render_fence
+    def trigger_render(self):
+        self.command_sender.trigger_render()
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--latitude", default=-33.857504, type=float, help="Location latitude")
@@ -164,7 +206,7 @@ def main():
     parser.add_argument("--port", default=None, type=str, help="COM port to connect to")
     parser.add_argument("--baudrate", default=9600, type=int, help="Rate to communicate with device")
     parser.add_argument("--list-ports", action="store_true", help="List all COM ports connected to computer")
-    parser.add_argument("--reset", action="store_true", help="Reset arduino on connection")
+    parser.add_argument("--no-reset", action="store_true", help="Don't reset arduino on connection")
     args = parser.parse_args()
 
     log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
@@ -189,21 +231,26 @@ def main():
         logger.info(f"Choosing port '{port.device}' by default")
         port_name = port.device
 
+    if not args.no_reset:
+        logger.info("Resetting on connection")
+
     try:
         ser = serial.Serial()
         ser.port = port_name
         ser.baudrate = args.baudrate
-        ser.dtr = args.reset
+        ser.dtr = not args.no_reset
         ser.open()
     except Exception as ex:
         logger.error(f"Failed to open serial device '{port_name}': {ex}")
         return 1
 
     try:
-        response_handler = CustomResponseHandler()
+        initial_is_busy = not args.no_reset
+        render_fence = RenderFence(initial_is_busy)
+        response_handler = CustomResponseHandler(render_fence)
         device = SerialDevice(ser, response_handler)
         openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
-        server = Server(device, openmeteo_url, args.location)
+        server = Server(device, render_fence, openmeteo_url, args.location)
         server.run()
     except KeyboardInterrupt:
         logger.info("Exiting on keyboard interrupt...")
@@ -211,6 +258,7 @@ def main():
         logger.error(f"Server failed with exception: {ex}")
         return 1
     finally:
+        render_fence.close()
         device.wait()
 
     return 0
