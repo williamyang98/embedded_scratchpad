@@ -122,6 +122,9 @@ class CommandParser:
             _type = get_field("type", str)
             if _type == "trigger_render":
                 await run_blocking(self.event_loop, lambda: self.command_sender.trigger_render())
+            elif _type == "set_screen_brightness":
+                screen_brightness = get_field("screen_brightness", int)
+                await run_blocking(self.event_loop, lambda: self.command_sender.set_screen_brightness(screen_brightness))
             elif _type == "set_temperature":
                 temperature = get_field("temperature", int)
                 await run_blocking(self.event_loop, lambda: self.command_sender.set_temperature(temperature))

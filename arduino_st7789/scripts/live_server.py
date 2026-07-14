@@ -107,15 +107,16 @@ def wait_render_fence(func):
     return wrapper
 
 class Server:
-    def __init__(self, device, render_fence, openmeteo_url, location):
+    def __init__(self, device, render_fence, openmeteo_url, location, screen_brightness):
         self.device = device
         self.render_fence = render_fence
         self.openmeteo_url = openmeteo_url
         self.command_sender = self.device.get_command_sender()
         self.location = location
+        self.screen_brightness = screen_brightness
 
     def run(self):
-        self.update_location()
+        self.on_connection()
         while True:
             self.update_time()
             self.update_weather()
@@ -131,8 +132,9 @@ class Server:
 
     @graceful_fail
     @wait_render_fence
-    def update_location(self):
+    def on_connection(self):
         self.command_sender.set_location(self.location.upper())
+        self.command_sender.set_screen_brightness(self.screen_brightness)
 
     @graceful_fail
     @wait_render_fence
@@ -207,6 +209,7 @@ def main():
     parser.add_argument("--baudrate", default=9600, type=int, help="Rate to communicate with device")
     parser.add_argument("--list-ports", action="store_true", help="List all COM ports connected to computer")
     parser.add_argument("--no-reset", action="store_true", help="Don't reset arduino on connection")
+    parser.add_argument("--screen-brightness", default=50, type=int, help="Screen brightness")
     args = parser.parse_args()
 
     log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
@@ -250,7 +253,7 @@ def main():
         response_handler = CustomResponseHandler(render_fence)
         device = SerialDevice(ser, response_handler)
         openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
-        server = Server(device, render_fence, openmeteo_url, args.location)
+        server = Server(device, render_fence, openmeteo_url, args.location, args.screen_brightness)
         server.run()
     except KeyboardInterrupt:
         logger.info("Exiting on keyboard interrupt...")

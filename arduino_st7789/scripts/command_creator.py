@@ -6,6 +6,7 @@ import inspect
 # ../src/app/commands.hpp
 class CommandHeader(IntEnum):
     TRIGGER_RENDER = 0x00
+    # weather page
     SET_TEMPERATURE = 0x01
     SET_HUMIDITY = 0x02
     SET_TIME_24_HOUR = 0x03
@@ -14,6 +15,9 @@ class CommandHeader(IntEnum):
     SET_LOCATION = 0x06
     SET_WEATHER_DESCRIPTION = 0x07
     SET_MOON_PHASE = 0x08
+    # set page
+    SET_SCREEN_BRIGHTNESS = 0xFE
+    SET_PAGE = 0xFF
 
 # ../src/app/weather_icons.hpp
 class WeatherIcon(IntEnum):
@@ -34,10 +38,29 @@ class MoonPhase(IntEnum):
     THIRD_QUARTER = 6
     WANING_CRESCENT = 7
 
+# ../src/app/app.hpp
+class AppPage(IntEnum):
+    LANDING_SCREEN = 0
+    WEATHER_PAGE = 1
+
 class CommandCreator:
     def trigger_render(self):
         return cobs.encode(bytearray([
             int(CommandHeader.TRIGGER_RENDER),
+        ]))
+
+    def set_page(self, page):
+        assert isinstance(page, AppPage)
+        return cobs.encode(bytearray([
+            int(CommandHeader.SET_PAGE),
+            int(page),
+        ]))
+
+    def set_screen_brightness(self, brightness):
+        assert isinstance(brightness, int)
+        return cobs.encode(bytearray([
+            int(CommandHeader.SET_SCREEN_BRIGHTNESS),
+            brightness & 0xFF,
         ]))
 
     def set_temperature(self, temperature):

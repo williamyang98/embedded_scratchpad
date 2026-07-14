@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "./app.hpp"
+#include "../hardware/tft.hpp"
 #include "../utility/cobs.hpp"
 #include "./response.hpp"
 
@@ -16,6 +17,7 @@ enum class CommandHeader: uint8_t {
     SET_WEATHER_DESCRIPTION = 0x07,
     SET_MOON_PHASE = 0x08,
     // set page
+    SET_SCREEN_BRIGHTNESS = 0xFE,
     SET_PAGE = 0xFF,
 };
 
@@ -87,6 +89,12 @@ private:
             if (page_index >= TOTAL_APP_PAGES) return false;
             const AppPage page = static_cast<AppPage>(buffer[1]);
             g_app.set_page(page);
+            return true;
+        }
+        if (header == CommandHeader::SET_SCREEN_BRIGHTNESS) {
+            if (length != 2) return false;
+            const uint8_t brightness = buffer[1];
+            tft::set_brightness(brightness);
             return true;
         }
         if (header == CommandHeader::SET_TEMPERATURE) {

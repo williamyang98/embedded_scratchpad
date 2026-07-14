@@ -13,6 +13,7 @@ const location = ref("Sydney");
 const weather_description = ref("cloudy rain");
 const weather_icon = ref(0);
 const moon_phase = ref(0);
+const screen_brightness = ref(50);
 
 function emit_command(command) {
   emits("command", command);
@@ -21,6 +22,13 @@ function emit_command(command) {
 function trigger_render() {
   emit_command({
     "type": "trigger_render",
+  });
+}
+
+function set_screen_brightness() {
+  emit_command({
+    "type": "set_screen_brightness",
+    "screen_brightness": screen_brightness.value,
   });
 }
 
@@ -82,6 +90,7 @@ function set_moon_phase() {
   });
 }
 
+watchEffect(set_screen_brightness);
 watchEffect(set_temperature);
 watchEffect(set_wind_kph);
 watchEffect(set_humidity);
@@ -100,6 +109,7 @@ function refresh_all() {
   set_weather_description();
   set_weather_icon();
   set_moon_phase();
+  set_screen_brightness();
   trigger_render();
 }
 
@@ -115,6 +125,10 @@ defineExpose({
 <form>
   <button @click.stop="trigger_render" type="button">Trigger Render</button>
   <button @click.stop="refresh_all" type="button">Refresh All</button>
+  <div>
+    <label>Screen brightness: </label>
+    <input type="range" v-model.number="screen_brightness" min="0", max="255">
+  </div>
   <div>
     <label>Temperature: </label>
     <input type="number" v-model.number="temperature_celcius" min="-999", max="900">
