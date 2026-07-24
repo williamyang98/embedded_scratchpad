@@ -118,7 +118,7 @@ async fn ble_scanner_task(ble_connector: BleConnector<'static>) {
 }
 
 #[embassy_executor::task]
-async fn hello_world_task(messages_channel: &'static MessageChannel) {
+async fn hello_world_task(messages_channel: &'static MessageChannel) -> ! {
     let mut counter: u32 = 0;
     loop {
         let message = messages_channel.receive().await;
@@ -128,7 +128,7 @@ async fn hello_world_task(messages_channel: &'static MessageChannel) {
 }
 
 #[embassy_executor::task]
-async fn send_messages_task(messages_channel: &'static MessageChannel) {
+async fn send_messages_task(messages_channel: &'static MessageChannel) -> ! {
     let rng = Rng::new();
     loop {
         let message: u32 = rng.random();
@@ -138,7 +138,7 @@ async fn send_messages_task(messages_channel: &'static MessageChannel) {
 }
 
 #[embassy_executor::task]
-async fn led_blink_task(mut led: Output<'static>) {
+async fn led_blink_task(mut led: Output<'static>) -> ! {
     loop {
         led.set_high();
         Timer::after(Duration::from_millis(100)).await;
