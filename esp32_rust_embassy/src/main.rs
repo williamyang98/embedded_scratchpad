@@ -6,6 +6,10 @@
     holding buffers for the duration of a data transfer."
 )]
 #![deny(clippy::large_stack_frames)]
+// NOTE: We get a query depth limit reached when the compiler is attempting to compute the size of
+// the embassy async task web_server_task because of picoserve's heavy use of traits which requires
+// the compiler to parse the AST extremely deep
+#![recursion_limit = "256"]
 
 use bt_hci::controller::ExternalController;
 use embassy_executor::Spawner;
@@ -39,7 +43,7 @@ use static_cell::StaticCell;
 use log::{info, error};
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
-    web_server::{run_web_server, WebServer},
+    web_server::WebServer,
 };
 
 extern crate alloc;
@@ -84,7 +88,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 98768);
     // COEX needs more RAM - so we've added some more
-    esp_alloc::heap_allocator!(size: 64 * 1024);
+    // esp_alloc::heap_allocator!(size: 64 * 1024);
 
     let timer_group_0 = TimerGroup::new(peripherals.TIMG0);
     let software_interrupt_control = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
@@ -175,7 +179,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
 
 #[embassy_executor::task]
 async fn web_server_task(web_server: WebServer) -> ! {
-    run_web_server(web_server).await;
+    web_server.run().await;
 }
 
 #[embassy_executor::task]

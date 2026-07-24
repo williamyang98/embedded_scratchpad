@@ -1,8 +1,9 @@
 [package]
-edition      = "2024"
-name         = "esp32-d0wd-v3"
+edition = "2024"
+name = "esp32-d0wd-v3"
 rust-version = "1.88"
-version      = "0.1.0"
+version = "0.1.0"
+readme = "README.md"
 
 [dependencies]
 log = { version = "0.4.27" }
@@ -75,6 +76,13 @@ smoltcp = { version = "0.13.1", default-features = false, features = [
   "socket-raw",
   "socket-tcp",
   "socket-udp",
+] }
+picoserve = { version = "0.19.0", features = [
+  "log",
+  "alloc",
+  "embassy",
+  "json",
+  "ws",
 ] }
 
 

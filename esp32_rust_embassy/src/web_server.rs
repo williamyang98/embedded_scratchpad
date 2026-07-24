@@ -1,22 +1,27 @@
-use embassy_net::{
-    Runner, Stack,
-    tcp::TcpSocket,
-    IpListenEndpoint,
-};
+use embassy_net::{Runner, Stack};
 use embassy_time::{Duration, Timer};
-use embassy_futures::join::join3;
-use embedded_io_async::Write;
+use embassy_futures::join::{join, join3};
+use embassy_sync::{
+    blocking_mutex::raw::NoopRawMutex,
+    channel::Channel,
+};
 use esp_radio::wifi::{
     Interface, WifiController,
     sta::StationConfig,
     Config as WifiConfig,
 };
-use log::{info, error};
+use picoserve::{
+    routing::get,
+    response::ws,
+    io,
+};
+use log::{info, error, warn};
 
 extern crate alloc;
 use alloc::{
-    string::ToString,
-    vec::Vec,
+    string::{String, ToString},
+    vec,
+    boxed::Box,
 };
 
 pub struct WebServer {
@@ -25,113 +30,111 @@ pub struct WebServer {
     pub net_runner: Runner<'static, Interface<'static>>,
 }
 
-pub async fn run_web_server(mut server: WebServer) -> ! {
-    let _ = join3(
-        server.net_runner.run(),
-        run_web_stack(server.net_stack),
-        run_wifi_station(server.wifi_controller),
-    ).await;
+impl WebServer {
+    pub async fn run(mut self) -> ! {
+        let _ = join3(
+            self.net_runner.run(),
+            run_web_stack(self.net_stack),
+            run_wifi_station(self.wifi_controller),
+        ).await;
 
-    loop {
-        error!("indefinitely running web server tasks somehow all terminated");
-        core::future::pending::<()>().await;
+        loop {
+            error!("indefinitely running web server tasks somehow all terminated");
+            core::future::pending::<()>().await;
+        }
+    }
+}
+
+struct WebsocketHandler;
+
+impl ws::WebSocketCallback for WebsocketHandler {
+    async fn run<R: io::Read, W: io::Write<Error = R::Error>>(
+        self,
+        mut rx: ws::SocketRx<R>,
+        mut tx: ws::SocketTx<W>,
+    ) -> Result<(), W::Error> {
+        use picoserve::{
+            response::ws::Message,
+            futures::Either,
+        };
+
+        let messages_channel = Box::new(Channel::<NoopRawMutex, String, 3>::new());
+        let mut message_buffer = vec![0; 128];
+
+        let close_reason: Option<(u16, &str)> = loop {
+            let message = rx
+                .next_message(&mut message_buffer, messages_channel.receive())
+                .await?;
+
+            let message: Message = match message {
+                Either::First(res) => match res {
+                    Ok(message) => message,
+                    Err(err) => {
+                        warn!("Websocket reception error: {err:?}");
+                        break Some((err.code(), "Websocket reception error"));
+                    },
+                },
+                Either::Second(res) => {
+                    info!("Websocket async channel result: {res:?}");
+                    continue;
+                },
+            };
+
+            info!("Message: {message:?}");
+            match message {
+                Message::Text(new_message) => {
+                    let (_, tx_res) = join(
+                        messages_channel.send(new_message.into()),
+                        tx.send_text(new_message),
+                    ).await;
+                    if let Err(err) = tx_res {
+                        error!("Websocket transmission error: {err:?}");
+                        break None;
+                    }
+                },
+                Message::Binary(message) => {
+                    info!("Ignoring binary message: {message:?}")
+                },
+                Message::Close(reason) => {
+                    info!("Websocket close reason: {reason:?}");
+                    break None;
+                },
+                Message::Ping(ping) => tx.send_pong(ping).await?,
+                Message::Pong(pong) => info!("Websocket pong: {pong:?}"),
+            };
+        };
+
+        tx.close(close_reason).await?;
+        Ok(())
     }
 }
 
 async fn run_web_stack(net_stack: Stack<'static>) -> ! {
-    let mut rx_buffer = Vec::new();
-    let mut tx_buffer = Vec::new();
-    rx_buffer.resize(2048, 0);
-    tx_buffer.resize(2048, 0);
-
     info!("Waiting for network stack to connection to station...");
     net_stack.wait_config_up().await;
     let config = net_stack.config_v4();
     info!("Network stack established on {config:?}");
 
-    const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
-    const IP_ENDPOINT: IpListenEndpoint = IpListenEndpoint {
-        addr: None,
-        port: 80,
-    };
+    let router = Box::new(picoserve::Router::new())
+        .route("/", get(async || { "Hello World!" }))
+        .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
+            upgrade
+                .on_upgrade(WebsocketHandler)
+                .with_protocol("messages")
+        }));
 
-    loop {
-        // each new connection gets a fresh tcp socket
-        let mut socket = TcpSocket::new(net_stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(CONNECTION_TIMEOUT));
+    let port = 80;
+    let mut tcp_rx_buffer = vec![0; 1024];
+    let mut tcp_tx_buffer = vec![0; 1024];
+    let mut http_buffer = vec![0; 2048];
 
-        info!("Listening for tcp connection on url={IP_ENDPOINT:?}");
-        if let Err(err) = socket.accept(IP_ENDPOINT).await {
-            error!("Failed to connect to tcp socket: {err:?}");
-            continue;
-        }
+    let config = picoserve::Config::const_default().keep_connection_alive();
+    let task_id: usize = 0;
 
-        let endpoint = socket.remote_endpoint();
-
-        handle_socket_connection(&mut socket).await;
-        socket.close();
-        info!("Closing connection ip={endpoint:?}");
-    }
-}
-
-async fn handle_socket_connection<'a>(socket: &mut TcpSocket<'a>) {
-    let endpoint = socket.remote_endpoint();
-    info!("Client connected from {:?}", endpoint);
-
-    let mut request_buffer = [0u8; 1024];
-    let mut request_size = 0;
-    loop {
-        let read_buffer = &mut request_buffer[request_size..];
-        if read_buffer.len() == 0 {
-            error!("Truncating response since it overflowed request buffer of size={0}, ip={endpoint:?}", request_buffer.len());
-            break;
-        }
-        match socket.read(read_buffer).await {
-            Ok(0) => break,
-            Ok(total_bytes) => {
-                let read_chunk = &read_buffer[..total_bytes];
-                request_size += total_bytes;
-                let is_eof = read_chunk.windows(4).any(|w| w == b"\r\n\r\n");
-                if is_eof {
-                    break;
-                }
-            }
-            Err(err) => {
-                error!("Error while reading request from ip={endpoint:?}, err={err:?}");
-                return;
-            },
-        }
-    }
-    let request_body = core::str::from_utf8(&request_buffer[..request_size]);
-    info!("Read request from connection ip={endpoint:?}");
-    match request_body {
-        Ok(body) => info!("Got request body length={0}\n{body}", body.len()),
-        Err(ref err) => {
-            error!("Bad request body: {err:?}");
-            return;
-        },
-    }
-
-    let response_body: &'static str = "Hello world!";
-    let response_header = alloc::format!(
-        "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
-    );
-
-    if let Err(err) = socket.write_all(response_header.as_bytes()).await {
-        error!("Failed to write response header to connection ip={endpoint:?}, err={err:?}");
-        return;
-    }
-    if let Err(err) = socket.write_all(response_body.as_bytes()).await {
-        error!("Failed to write response body to connection ip={endpoint:?}, err={err:?}");
-        return;
-    }
-    if let Err(err) = socket.flush().await {
-        error!("Failed to flush to connection ip={endpoint:?}, err={err:?}");
-        return;
-    }
-
-    info!("Successfully handled socket connection ip={endpoint:?}");
+    Box::new(picoserve::Server::new(&router, &config, &mut http_buffer))
+        .listen_and_serve(task_id, net_stack, port, &mut tcp_rx_buffer, &mut tcp_tx_buffer)
+        .await
+        .into_never()
 }
 
 async fn run_wifi_station(mut wifi_controller: WifiController<'static>) -> ! {

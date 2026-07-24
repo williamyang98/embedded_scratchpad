@@ -1,1 +1,2 @@
-stack-size-threshold = 1024
+# avoid making the heap too big to prevent it from colliding with the stack space
+stack-size-threshold = 32768
