@@ -10,6 +10,10 @@
 use bt_hci::controller::ExternalController;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
+use embassy_sync::{
+    channel::Channel,
+    blocking_mutex::raw::CriticalSectionRawMutex,
+};
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
@@ -18,6 +22,7 @@ use esp_hal::{
     interrupt::software::SoftwareInterruptControl,
     gpio::{Output, Level, OutputConfig},
     system::Stack,
+    rng::Rng,
 };
 use esp_rtos::embassy::Executor;
 use esp_radio::ble::controller::BleConnector;
@@ -28,6 +33,12 @@ use log::info;
 extern crate alloc;
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
+static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
+
+type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
+static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
 
 #[allow(
     clippy::large_stack_frames,
@@ -74,7 +85,8 @@ async fn main_core_0(spawner: Spawner) {
     let led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
     info!("Configured peripherals");
 
-    static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
+    let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
+
     let core_1_stack = CORE_1_STACK.init(Stack::new());
     esp_rtos::start_second_core_with_stack_guard_offset(
         peripherals.CPU_CTRL,
@@ -82,10 +94,9 @@ async fn main_core_0(spawner: Spawner) {
         core_1_stack,
         None,
         move || {
-            static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
             let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
             core_1_executor.run(|spawner| {
-                spawner.spawn(hello_world_task().unwrap());
+                spawner.spawn(hello_world_task(messages_channel).unwrap());
                 spawner.spawn(led_blink_task(led).unwrap());
                 info!("core 1 running all tasks");
             });
@@ -96,6 +107,7 @@ async fn main_core_0(spawner: Spawner) {
     // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
     // esp_radio::init() needs special core considerations
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
+    spawner.spawn(send_messages_task(messages_channel).unwrap());
     info!("core 0 running all tasks");
 }
 
@@ -106,11 +118,21 @@ async fn ble_scanner_task(ble_connector: BleConnector<'static>) {
 }
 
 #[embassy_executor::task]
-async fn hello_world_task() {
+async fn hello_world_task(messages_channel: &'static MessageChannel) {
     let mut counter: u32 = 0;
     loop {
-        info!("Hello world {counter}!");
+        let message = messages_channel.receive().await;
+        info!("Hello world counter={counter}, message={message}!");
         counter += 1;
+    }
+}
+
+#[embassy_executor::task]
+async fn send_messages_task(messages_channel: &'static MessageChannel) {
+    let rng = Rng::new();
+    loop {
+        let message: u32 = rng.random();
+        messages_channel.send(message).await;
         Timer::after(Duration::from_secs(1)).await;
     }
 }

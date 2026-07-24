@@ -23,6 +23,7 @@ embassy-net = { version = "0.9.1", features = [
   "tcp",
   "udp",
 ] }
+embassy-sync = { version = "0.8.0", features = ["log"] }
 # esp32
 esp-hal = { version = "1.1.1", features = [
   "esp32",

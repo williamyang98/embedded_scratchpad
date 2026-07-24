@@ -492,6 +492,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "heapless 0.9.3",
+ "log",
 ]
 
 [[package]]
@@ -1028,6 +1029,7 @@ dependencies = [
  "embassy-executor",
  "embassy-futures",
  "embassy-net",
+ "embassy-sync 0.8.0",
  "embassy-time",
  "embedded-io 0.7.1",
  "embedded-io-async 0.7.0",
