@@ -14,6 +14,7 @@ use embassy_sync::{
     channel::Channel,
     blocking_mutex::raw::CriticalSectionRawMutex,
 };
+use embassy_net as net;
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
@@ -35,20 +36,23 @@ use esp_hal::{
 use esp_rtos::embassy::Executor;
 use esp_radio::ble::controller::BleConnector;
 use static_cell::StaticCell;
-use esp32_d0wd_v3::ble_scanner::ble_scanner_run;
 use log::{info, error};
+use esp32_d0wd_v3::{
+    ble_scanner::ble_scanner_run,
+    web_server::{run_web_server, WebServer},
+};
 
 extern crate alloc;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
+
 static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
-
-type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
 static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
-
 static LED_LOW_SPEED_TIMER_0: StaticCell<ledc_timer::Timer<'static, LowSpeed>> = StaticCell::new();
+static NET_STACK_RESOURCES: StaticCell<net::StackResources<3>> = StaticCell::new();
 
 #[allow(
     clippy::large_stack_frames,
@@ -88,10 +92,29 @@ async fn main_core_0(spawner: Spawner) -> ! {
     esp_rtos::start(timer_group_0.timer0, software_interrupt_control.software_interrupt0);
     info!("esp_rtos started first executor on core 0");
 
-    let (mut _wifi_controller, _interfaces) = esp_radio::wifi::new(peripherals.WIFI, Default::default())
+    let (wifi_controller, interfaces) = esp_radio::wifi::new(peripherals.WIFI, Default::default())
         .expect("Failed to initialize Wi-Fi controller");
     let ble_connector = BleConnector::new(peripherals.BT, Default::default())
         .expect("Failed to initialize BLE connector");
+
+    let net_config = net::Config::dhcpv4(Default::default());
+    let net_stack_resources = NET_STACK_RESOURCES.init(net::StackResources::new());
+    let net_seed: u64 = {
+        let rng = esp_hal::rng::Rng::new();
+        let seed: u64 = (rng.random() as u64) << 32 | (rng.random() as u64);
+        seed
+    };
+    let (net_stack, net_runner) = net::new(
+        interfaces.station,
+        net_config,
+        net_stack_resources,
+        net_seed,
+    );
+    let web_server = WebServer {
+        wifi_controller,
+        net_stack,
+        net_runner,
+    };
 
     // pwm controller for leds that handles fading the pwm duty cycle
     let mut led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
@@ -138,6 +161,8 @@ async fn main_core_0(spawner: Spawner) -> ! {
 
     // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
     // esp_radio::init() needs special core considerations
+    // So we have wifi and bluetooth on core 0 so all the interrupts actually work
+    spawner.spawn(web_server_task(web_server).unwrap());
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
     spawner.spawn(led_blink_task(led_channel_0).unwrap());
     info!("core 0 running all tasks");
@@ -146,6 +171,11 @@ async fn main_core_0(spawner: Spawner) -> ! {
         core::future::pending::<()>().await;
         error!("core 0 main somehow woke up from being indefinitely idle");
     }
+}
+
+#[embassy_executor::task]
+async fn web_server_task(web_server: WebServer) -> ! {
+    run_web_server(web_server).await;
 }
 
 #[embassy_executor::task]
