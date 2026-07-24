@@ -47,12 +47,13 @@ use esp32_d0wd_v3::{
 };
 
 extern crate alloc;
+use alloc::boxed::Box;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
 
-static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
+static CORE_1_STACK: StaticCell<Box<Stack<8192>>> = StaticCell::new();
 static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
 static LED_LOW_SPEED_TIMER_0: StaticCell<ledc_timer::Timer<'static, LowSpeed>> = StaticCell::new();
@@ -146,7 +147,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
 
-    let core_1_stack = CORE_1_STACK.init(Stack::new());
+    let core_1_stack = CORE_1_STACK.init(Box::new(Stack::new()));
     esp_rtos::start_second_core(
         peripherals.CPU_CTRL,
         software_interrupt_control.software_interrupt1,
