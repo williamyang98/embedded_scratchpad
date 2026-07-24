@@ -45,6 +45,11 @@ impl WebServer {
     }
 }
 
+// https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
+// https://www.iana.org/assignments/websocket/websocket.xml#subprotocol-name
+// In javascript: ```let ws = new WebSocket("ws://<HOSTNAME>:<PORT>/ws", ["soap"])```
+static WEBSOCKET_PROTOCOL: &str = "soap";
+
 struct WebsocketHandler;
 
 impl ws::WebSocketCallback for WebsocketHandler {
@@ -120,7 +125,7 @@ async fn run_web_stack(net_stack: Stack<'static>) -> ! {
         .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
             upgrade
                 .on_upgrade(WebsocketHandler)
-                .with_protocol("messages")
+                .with_protocol(WEBSOCKET_PROTOCOL)
         }));
 
     let port = 80;
