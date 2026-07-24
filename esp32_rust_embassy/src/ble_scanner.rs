@@ -5,16 +5,16 @@ use bt_hci::{
     param::LeAdvReportsIter,
 };
 use embassy_futures::join::join;
-use embassy_time::{Duration, Timer};
+use embassy_time::Duration;
 use heapless::Deque;
 use trouble_host::prelude::*;
-use log::info;
+use log::{info, error};
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
 const L2CAP_CHANNELS_MAX: usize = 1;
 
-pub async fn ble_scanner_run<C>(controller: C)
+pub async fn ble_scanner_run<C>(controller: C) -> !
 where
     C: Controller + ControllerCmdSync<LeSetScanParams>,
 {
@@ -43,16 +43,21 @@ where
         config.interval = Duration::from_secs(1);
         config.window = Duration::from_secs(1);
         let mut _session = scanner.scan(&config).await.unwrap();
-        // Scan forever
         loop {
-            Timer::after(Duration::from_secs(1)).await;
+            core::future::pending::<()>().await;
+            error!("bluetooth scanning loop somehow broke free from its indefinite scanning time");
         }
     };
 
     let _ = join(
-        runner.run_with_handler(&printer), 
+        runner.run_with_handler(&printer),
         run_scanner(),
     ).await;
+
+    loop {
+        error!("bluetooth tasks somehow finished even though they were meant to be indefinite");
+        core::future::pending::<()>().await;
+    }
 }
 
 struct Printer {

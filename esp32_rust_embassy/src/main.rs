@@ -149,7 +149,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
 }
 
 #[embassy_executor::task]
-async fn ble_scanner_task(ble_connector: BleConnector<'static>) {
+async fn ble_scanner_task(ble_connector: BleConnector<'static>) -> ! {
     let ble_controller = ExternalController::<_, 1>::new(ble_connector);
     ble_scanner_run(ble_controller).await;
 }
