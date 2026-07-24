@@ -19,7 +19,7 @@ MAC address:       d4:e9:f4:64:c0:58
 Security features: None
 ```
 
-3. Generate esp project: ```esp-generate```
+3. Generate esp project using terminal ui: ```esp-generate```
     - Chip type: ```esp32```
     - Module/board selection: ```esp32-wroom-32d/u```
     - Refer to datasheet: ```datasheet/espressif_esp32_wroom-32du_datasheet.pdf``` which refers to the ```esp32-d0wd-v3``` IC
@@ -28,6 +28,8 @@ Security features: None
     - Enable Wi-Fi via the esp-radio crate
     - Enable BLE via the esp-radio crate (embassy-trouble)
     - Add embassy framework support
+
+4. Alternatively generate without terminal ui: ```esp-generate <PROJECT_NAME> --headless --chip esp32 -o esp32-wroom-32d -o unstable-hal -o alloc -o wifi -o embassy -o ble-trouble -o log -o esp-backtrace -o esp```
 
 ## Building and flashing
 1. Build: ```cargo build```
