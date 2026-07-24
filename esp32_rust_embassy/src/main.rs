@@ -10,7 +10,6 @@
 use bt_hci::controller::ExternalController;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-extern crate alloc;
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
@@ -18,10 +17,15 @@ use esp_hal::{
     timer::timg::TimerGroup,
     interrupt::software::SoftwareInterruptControl,
     gpio::{Output, Level, OutputConfig},
+    system::Stack,
 };
+use esp_rtos::embassy::Executor;
 use esp_radio::ble::controller::BleConnector;
-use log::info;
+use static_cell::StaticCell;
 use esp32_d0wd_v3::ble_scanner::ble_scanner_run;
+use log::info;
+
+extern crate alloc;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -30,7 +34,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
     reason = "it's not unusual to allocate larger buffers etc. in main"
 )]
 #[esp_rtos::main]
-async fn main(spawner: Spawner) {
+async fn main_core_0(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -59,18 +63,40 @@ async fn main(spawner: Spawner) {
 
     let timer_group_0 = TimerGroup::new(peripherals.TIMG0);
     let software_interrupt_control = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+
     esp_rtos::start(timer_group_0.timer0, software_interrupt_control.software_interrupt0);
-    info!("esp_rtos and embassy initialised");
+    info!("esp_rtos started first executor on core 0");
 
     let (mut _wifi_controller, _interfaces) = esp_radio::wifi::new(peripherals.WIFI, Default::default())
         .expect("Failed to initialize Wi-Fi controller");
     let ble_connector = BleConnector::new(peripherals.BT, Default::default())
         .expect("Failed to initialize BLE connector");
     let led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
+    info!("Configured peripherals");
 
+    static CORE_1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
+    let core_1_stack = CORE_1_STACK.init(Stack::new());
+    esp_rtos::start_second_core_with_stack_guard_offset(
+        peripherals.CPU_CTRL,
+        software_interrupt_control.software_interrupt1,
+        core_1_stack,
+        None,
+        move || {
+            static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
+            let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
+            core_1_executor.run(|spawner| {
+                spawner.spawn(hello_world_task().unwrap());
+                spawner.spawn(led_blink_task(led).unwrap());
+                info!("core 1 running all tasks");
+            });
+        },
+    );
+    info!("esp_rtos started second executor on core 1");
+
+    // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
+    // esp_radio::init() needs special core considerations
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
-    spawner.spawn(hello_world_task().unwrap());
-    spawner.spawn(led_blink_task(led).unwrap());
+    info!("core 0 running all tasks");
 }
 
 #[embassy_executor::task]
