@@ -1,5 +1,5 @@
 [target.xtensa-esp32-none-elf]
-runner = "espflash flash --monitor --chip esp32 --flash-mode dio --flash-freq 80mhz --flash-size 4mb"
+runner = "espflash flash --monitor --chip esp32 --flash-mode qout --flash-freq 80mhz --flash-size 4mb --baud 921600"
 
 [env]
 ESP_LOG="info"
