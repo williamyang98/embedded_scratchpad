@@ -100,7 +100,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
     let net_config = net::Config::dhcpv4(Default::default());
     let net_stack_resources = NET_STACK_RESOURCES.init(net::StackResources::new());
     let net_seed: u64 = {
-        let rng = esp_hal::rng::Rng::new();
+        let rng = Rng::new();
         let seed: u64 = (rng.random() as u64) << 32 | (rng.random() as u64);
         seed
     };
@@ -143,16 +143,16 @@ async fn main_core_0(spawner: Spawner) -> ! {
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
 
     let core_1_stack = CORE_1_STACK.init(Stack::new());
-    esp_rtos::start_second_core_with_stack_guard_offset(
+    esp_rtos::start_second_core(
         peripherals.CPU_CTRL,
         software_interrupt_control.software_interrupt1,
         core_1_stack,
-        None,
         move || {
             let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
             core_1_executor.run(|spawner| {
                 spawner.spawn(hello_world_task(messages_channel).unwrap());
                 spawner.spawn(send_messages_task(messages_channel).unwrap());
+                spawner.spawn(print_heap_stats().unwrap());
                 info!("core 1 running all tasks");
             });
         },
@@ -218,5 +218,15 @@ async fn led_blink_task(led_channel_0: ledc_channel::Channel<'static, LowSpeed>)
             led_channel_0.set_duty(i).unwrap();
             Timer::after(WAIT_DELAY).await;
         }
+    }
+}
+
+#[embassy_executor::task]
+async fn print_heap_stats() -> ! {
+    const POLL_PERIOD: Duration = Duration::from_secs(60);
+    loop {
+        let stats = esp_alloc::HEAP.stats();
+        info!("Heap stats\n{stats}");
+        Timer::after(POLL_PERIOD).await;
     }
 }

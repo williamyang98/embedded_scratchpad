@@ -10,6 +10,9 @@ use heapless::Deque;
 use trouble_host::prelude::*;
 use log::{info, error};
 
+extern crate alloc;
+use alloc::boxed::Box;
+
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
 const L2CAP_CHANNELS_MAX: usize = 1;
@@ -32,7 +35,7 @@ where
     let central = host.central;
 
     let printer = Printer {
-        seen: RefCell::new(Deque::new()),
+        seen: RefCell::new(Box::new(Deque::new())),
     };
 
     let run_scanner = async move || -> ! {
@@ -61,7 +64,7 @@ where
 }
 
 struct Printer {
-    seen: RefCell<Deque<BdAddr, 128>>,
+    seen: RefCell<Box<Deque<BdAddr, 128>>>,
 }
 
 impl EventHandler for Printer {
@@ -69,9 +72,11 @@ impl EventHandler for Printer {
         let mut seen = self.seen.borrow_mut();
         while let Some(Ok(report)) = it.next() {
             if seen.iter().find(|b| b.raw() == report.addr.raw()).is_none() {
-                info!("Discovered new bluetooth device with address={:?}", report.addr);
+                info!("Discovered new bluetooth device with address={:02X?}", report.addr.raw());
                 if seen.is_full() {
-                    seen.pop_front();
+                    if let Some(addr) = seen.pop_front() {
+                        info!("Removing oldest seen bluetooth device with address={:02X?}", addr.raw());
+                    }
                 }
                 seen.push_back(report.addr).unwrap();
             }
