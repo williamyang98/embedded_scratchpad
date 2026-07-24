@@ -26,9 +26,9 @@ where
     let address: Address = Address::random([0xff, 0x8f, 0x1b, 0x05, 0xe4, 0xff]);
     info!("Assigned our bluetooth address={:?}", address);
 
-    let mut resources: HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
-        HostResources::new();
-    let stack = trouble_host::new(controller, &mut resources)
+    let mut resources: Box<HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX>> =
+        Box::new(HostResources::new());
+    let stack = Box::new(trouble_host::new(controller, &mut resources))
         .set_random_address(address);
     let host = stack.build();
     let mut runner = host.runner;
@@ -39,12 +39,14 @@ where
     };
 
     let run_scanner = async move || -> ! {
-        let mut scanner = Scanner::new(central);
-        let mut config = ScanConfig::default();
-        config.active = true;
-        config.phys = PhySet::M1;
-        config.interval = Duration::from_secs(1);
-        config.window = Duration::from_secs(1);
+        let mut scanner = Box::new(Scanner::new(central));
+        let config = Box::new(ScanConfig {
+            active: true,
+            phys: PhySet::M1,
+            interval: Duration::from_secs(1),
+            window: Duration::from_secs(1),
+            ..Default::default()
+        });
         let mut _session = scanner.scan(&config).await.unwrap();
         loop {
             core::future::pending::<()>().await;
@@ -73,10 +75,8 @@ impl EventHandler for Printer {
         while let Some(Ok(report)) = it.next() {
             if seen.iter().find(|b| b.raw() == report.addr.raw()).is_none() {
                 info!("Discovered new bluetooth device with address={:02X?}", report.addr.raw());
-                if seen.is_full() {
-                    if let Some(addr) = seen.pop_front() {
-                        info!("Removing oldest seen bluetooth device with address={:02X?}", addr.raw());
-                    }
+                if seen.is_full() && let Some(addr) = seen.pop_front() {
+                    info!("Removing oldest seen bluetooth device with address={:02X?}", addr.raw());
                 }
                 seen.push_back(report.addr).unwrap();
             }
