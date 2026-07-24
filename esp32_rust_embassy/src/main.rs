@@ -20,15 +20,23 @@ use esp_hal::{
     clock::CpuClock,
     timer::timg::TimerGroup,
     interrupt::software::SoftwareInterruptControl,
-    gpio::{Output, Level, OutputConfig},
     system::Stack,
     rng::Rng,
+    time::Rate,
+    gpio::{Output, Level, OutputConfig, DriveMode},
+    ledc::{
+        Ledc, LSGlobalClkSource, LowSpeed,
+        timer as ledc_timer,
+        timer::TimerIFace,
+        channel as ledc_channel,
+        channel::ChannelIFace,
+    },
 };
 use esp_rtos::embassy::Executor;
 use esp_radio::ble::controller::BleConnector;
 use static_cell::StaticCell;
 use esp32_d0wd_v3::ble_scanner::ble_scanner_run;
-use log::info;
+use log::{info, error};
 
 extern crate alloc;
 
@@ -40,12 +48,14 @@ static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
 static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
 
+static LED_LOW_SPEED_TIMER_0: StaticCell<ledc_timer::Timer<'static, LowSpeed>> = StaticCell::new();
+
 #[allow(
     clippy::large_stack_frames,
     reason = "it's not unusual to allocate larger buffers etc. in main"
 )]
 #[esp_rtos::main]
-async fn main_core_0(spawner: Spawner) {
+async fn main_core_0(spawner: Spawner) -> ! {
     esp_println::logger::init_logger_from_env();
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -82,8 +92,30 @@ async fn main_core_0(spawner: Spawner) {
         .expect("Failed to initialize Wi-Fi controller");
     let ble_connector = BleConnector::new(peripherals.BT, Default::default())
         .expect("Failed to initialize BLE connector");
-    let led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
-    info!("Configured peripherals");
+
+    // pwm controller for leds that handles fading the pwm duty cycle
+    let mut led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
+    led.set_low();
+    // led.set_high();
+
+    // led_controller -> low_speed_timer -> low_speed_channel -> led_output
+    let mut led_controller = Ledc::new(peripherals.LEDC);
+    led_controller.set_global_slow_clock(LSGlobalClkSource::APBClk);
+    let led_low_speed_timer_0 = LED_LOW_SPEED_TIMER_0.init(led_controller.timer::<LowSpeed>(ledc_timer::Number::Timer0));
+    led_low_speed_timer_0.configure(ledc_timer::config::Config {
+        duty: ledc_timer::config::Duty::Duty5Bit,
+        clock_source: ledc_timer::LSClockSource::APBClk,
+        frequency: Rate::from_khz(24),
+    }).expect("Failed to configure led controller low speed timer");
+
+    let mut led_channel_0 = led_controller.channel::<LowSpeed>(ledc_channel::Number::Channel0, led);
+    led_channel_0.configure(ledc_channel::config::Config {
+        timer: &*led_low_speed_timer_0,
+        duty_pct: 0,
+        drive_mode: DriveMode::PushPull,
+    }).expect("Failed to configure led controller low speed channel");
+
+    info!("Configured all peripherals");
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
 
@@ -97,7 +129,7 @@ async fn main_core_0(spawner: Spawner) {
             let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
             core_1_executor.run(|spawner| {
                 spawner.spawn(hello_world_task(messages_channel).unwrap());
-                spawner.spawn(led_blink_task(led).unwrap());
+                spawner.spawn(send_messages_task(messages_channel).unwrap());
                 info!("core 1 running all tasks");
             });
         },
@@ -107,8 +139,13 @@ async fn main_core_0(spawner: Spawner) {
     // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
     // esp_radio::init() needs special core considerations
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
-    spawner.spawn(send_messages_task(messages_channel).unwrap());
+    spawner.spawn(led_blink_task(led_channel_0).unwrap());
     info!("core 0 running all tasks");
+
+    loop {
+        core::future::pending::<()>().await;
+        error!("core 0 main somehow woke up from being indefinitely idle");
+    }
 }
 
 #[embassy_executor::task]
@@ -138,11 +175,18 @@ async fn send_messages_task(messages_channel: &'static MessageChannel) -> ! {
 }
 
 #[embassy_executor::task]
-async fn led_blink_task(mut led: Output<'static>) -> ! {
+async fn led_blink_task(led_channel_0: ledc_channel::Channel<'static, LowSpeed>) -> ! {
+    const WAIT_DELAY: Duration = Duration::from_millis(10);
+    const MIN_DUTY_CYCLE: u8 = 0;
+    const MAX_DUTY_CYCLE: u8 = 50;
     loop {
-        led.set_high();
-        Timer::after(Duration::from_millis(100)).await;
-        led.set_low();
-        Timer::after(Duration::from_millis(100)).await;
+        for i in MIN_DUTY_CYCLE..=MAX_DUTY_CYCLE {
+            led_channel_0.set_duty(i).unwrap();
+            Timer::after(WAIT_DELAY).await;
+        }
+        for i in (MIN_DUTY_CYCLE..=MAX_DUTY_CYCLE).rev() {
+            led_channel_0.set_duty(i).unwrap();
+            Timer::after(WAIT_DELAY).await;
+        }
     }
 }
