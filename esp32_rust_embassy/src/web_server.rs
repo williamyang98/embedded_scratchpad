@@ -16,6 +16,7 @@ use picoserve::{
     io,
 };
 use log::{info, error, warn};
+use itertools::Itertools;
 
 extern crate alloc;
 use alloc::{
@@ -66,7 +67,8 @@ impl ws::WebSocketCallback for WebsocketHandler {
         let messages_channel = Box::new(Channel::<NoopRawMutex, String, 3>::new());
         let mut message_buffer = vec![0; 128];
 
-        let close_reason: Option<(u16, &str)> = loop {
+        type ExitCode<'a> = (u16, &'a str);
+        let close_reason: Option<ExitCode> = loop {
             let message = rx
                 .next_message(&mut message_buffer, messages_channel.receive())
                 .await?;
@@ -123,6 +125,7 @@ async fn run_web_stack(net_stack: Stack<'static>) -> ! {
     let router = Box::new(picoserve::Router::new())
         .route("/", get(async || { "Hello World!" }))
         .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
+            info!("Got websocket connection requesting protocols: {0:?}", upgrade.protocols().map(|p| p.format(",")));
             upgrade
                 .on_upgrade(WebsocketHandler)
                 .with_protocol(WEBSOCKET_PROTOCOL)
