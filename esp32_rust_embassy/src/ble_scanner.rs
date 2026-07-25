@@ -94,7 +94,8 @@ impl EventHandler for DeviceTracker {
             let report_address = report.addr;
             let is_new_address = addresses.iter().find(|address| address.raw() == report_address.raw()).is_none();
             if is_new_address {
-                log::info!("Discovered new bluetooth device with address=0x{0}", display_address(&report_address));
+                log::info!("Adding new bluetooth device with address=0x{0} to existing total_devices={1}",
+                    display_address(&report_address), addresses.len());
                 let is_full = addresses.len() == addresses.capacity();
                 if is_full && let Some(old_address) = addresses.pop_front() {
                     log::info!("Removing oldest seen bluetooth device with address=0x{0}", display_address(&old_address));
