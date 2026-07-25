@@ -40,7 +40,6 @@ use esp_hal::{
 use esp_rtos::embassy::Executor;
 use esp_radio::ble::controller::BleConnector;
 use static_cell::StaticCell;
-use log::{info, error};
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
     web_server::WebServer,
@@ -95,7 +94,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
     let software_interrupt_control = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
 
     esp_rtos::start(timer_group_0.timer0, software_interrupt_control.software_interrupt0);
-    info!("esp_rtos started first executor on core 0");
+    log::info!("esp_rtos started first executor on core 0");
 
     let (wifi_controller, interfaces) = esp_radio::wifi::new(peripherals.WIFI, Default::default())
         .expect("Failed to initialize Wi-Fi controller");
@@ -143,7 +142,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
         drive_mode: DriveMode::PushPull,
     }).expect("Failed to configure led controller low speed channel");
 
-    info!("Configured all peripherals");
+    log::info!("Configured all peripherals");
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
 
@@ -158,11 +157,11 @@ async fn main_core_0(spawner: Spawner) -> ! {
                 spawner.spawn(hello_world_task(messages_channel).unwrap());
                 spawner.spawn(send_messages_task(messages_channel).unwrap());
                 spawner.spawn(print_heap_stats().unwrap());
-                info!("core 1 running all tasks");
+                log::info!("core 1 running all tasks");
             });
         },
     );
-    info!("esp_rtos started second executor on core 1");
+    log::info!("esp_rtos started second executor on core 1");
 
     // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
     // esp_radio::init() needs special core considerations
@@ -170,11 +169,11 @@ async fn main_core_0(spawner: Spawner) -> ! {
     spawner.spawn(web_server_task(web_server).unwrap());
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
     spawner.spawn(led_blink_task(led_channel_0).unwrap());
-    info!("core 0 running all tasks");
+    log::info!("core 0 running all tasks");
 
     loop {
         core::future::pending::<()>().await;
-        error!("core 0 main somehow woke up from being indefinitely idle");
+        log::error!("core 0 main somehow woke up from being indefinitely idle");
     }
 }
 
@@ -194,7 +193,7 @@ async fn hello_world_task(messages_channel: &'static MessageChannel) -> ! {
     let mut counter: u32 = 0;
     loop {
         let message = messages_channel.receive().await;
-        info!("Hello world counter={counter}, message={message}!");
+        log::info!("Hello world counter={counter}, message={message}!");
         counter += 1;
     }
 }
@@ -231,7 +230,7 @@ async fn print_heap_stats() -> ! {
     const POLL_PERIOD: Duration = Duration::from_secs(60);
     loop {
         let stats = esp_alloc::HEAP.stats();
-        info!("Heap stats\n{stats}");
+        log::info!("Heap stats\n{stats}");
         Timer::after(POLL_PERIOD).await;
     }
 }

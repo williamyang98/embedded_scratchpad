@@ -7,7 +7,6 @@ use bt_hci::{
 use embassy_futures::join::join;
 use embassy_time::Duration;
 use trouble_host::prelude::*;
-use log::{info, error};
 
 extern crate alloc;
 use alloc::{
@@ -28,7 +27,7 @@ where
     // Using a fixed "random" address can be useful for testing. In real scenarios, one would
     // use e.g. the MAC 6 byte array as the address (how to get that varies by the platform).
     let address: Address = Address::random([0xff, 0x8f, 0x1b, 0x05, 0xe4, 0xff]);
-    info!("Assigned our bluetooth address={:?}", address);
+    log::info!("Assigned our bluetooth address={:?}", address);
 
     let mut resources: Box<HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX>> =
         Box::new(HostResources::new());
@@ -50,7 +49,7 @@ where
         let mut _session = scanner.scan(&config).await.unwrap();
         loop {
             core::future::pending::<()>().await;
-            error!("bluetooth scanning loop somehow broke free from its indefinite scanning time");
+            log::error!("bluetooth scanning loop somehow broke free from its indefinite scanning time");
         }
     };
 
@@ -61,7 +60,7 @@ where
     ).await;
 
     loop {
-        error!("bluetooth tasks somehow finished even though they were meant to be indefinite");
+        log::error!("bluetooth tasks somehow finished even though they were meant to be indefinite");
         core::future::pending::<()>().await;
     }
 }
@@ -87,7 +86,7 @@ impl EventHandler for DeviceTracker {
         let mut addresses = match self.addresses.try_borrow_mut() {
             Ok(addresses) => addresses,
             Err(err) => {
-                error!("Received BLE device reports while in the middle of processing previous reports: {err:?}");
+                log::error!("Received BLE device reports while in the middle of processing previous reports: {err:?}");
                 return;
             },
         };
@@ -95,10 +94,10 @@ impl EventHandler for DeviceTracker {
             let report_address = report.addr;
             let is_new_address = addresses.iter().find(|address| address.raw() == report_address.raw()).is_none();
             if is_new_address {
-                info!("Discovered new bluetooth device with address=0x{0}", display_address(&report_address));
+                log::info!("Discovered new bluetooth device with address=0x{0}", display_address(&report_address));
                 let is_full = addresses.len() == addresses.capacity();
                 if is_full && let Some(old_address) = addresses.pop_front() {
-                    info!("Removing oldest seen bluetooth device with address=0x{0}", display_address(&old_address));
+                    log::info!("Removing oldest seen bluetooth device with address=0x{0}", display_address(&old_address));
                 }
             }
             addresses.push_back(report.addr);

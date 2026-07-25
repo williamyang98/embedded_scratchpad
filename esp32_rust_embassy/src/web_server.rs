@@ -15,7 +15,6 @@ use picoserve::{
     response::ws,
     io,
 };
-use log::{info, error, warn};
 use itertools::Itertools;
 
 extern crate alloc;
@@ -40,7 +39,7 @@ impl WebServer {
         ).await;
 
         loop {
-            error!("indefinitely running web server tasks somehow all terminated");
+            log::error!("indefinitely running web server tasks somehow all terminated");
             core::future::pending::<()>().await;
         }
     }
@@ -77,17 +76,17 @@ impl ws::WebSocketCallback for WebsocketHandler {
                 Either::First(res) => match res {
                     Ok(message) => message,
                     Err(err) => {
-                        warn!("Websocket reception error: {err:?}");
+                        log::warn!("Websocket reception error: {err:?}");
                         break Some((err.code(), "Websocket reception error"));
                     },
                 },
                 Either::Second(res) => {
-                    info!("Websocket async channel result: {res:?}");
+                    log::info!("Websocket async channel result: {res:?}");
                     continue;
                 },
             };
 
-            info!("Message: {message:?}");
+            log::info!("Message: {message:?}");
             match message {
                 Message::Text(new_message) => {
                     let (_, tx_res) = join(
@@ -95,19 +94,19 @@ impl ws::WebSocketCallback for WebsocketHandler {
                         tx.send_text(new_message),
                     ).await;
                     if let Err(err) = tx_res {
-                        error!("Websocket transmission error: {err:?}");
+                        log::error!("Websocket transmission error: {err:?}");
                         break None;
                     }
                 },
                 Message::Binary(message) => {
-                    info!("Ignoring binary message: {message:?}")
+                    log::info!("Ignoring binary message: {message:?}")
                 },
                 Message::Close(reason) => {
-                    info!("Websocket close reason: {reason:?}");
+                    log::info!("Websocket close reason: {reason:?}");
                     break None;
                 },
                 Message::Ping(ping) => tx.send_pong(ping).await?,
-                Message::Pong(pong) => info!("Websocket pong: {pong:?}"),
+                Message::Pong(pong) => log::info!("Websocket pong: {pong:?}"),
             };
         };
 
@@ -117,15 +116,15 @@ impl ws::WebSocketCallback for WebsocketHandler {
 }
 
 async fn run_web_stack(net_stack: Stack<'static>) -> ! {
-    info!("Waiting for network stack to connection to station...");
+    log::info!("Waiting for network stack to connection to station...");
     net_stack.wait_config_up().await;
     let config = net_stack.config_v4();
-    info!("Network stack established on {config:?}");
+    log::info!("Network stack established on {config:?}");
 
     let router = Box::new(picoserve::Router::new())
         .route("/", get(async || { "Hello World!" }))
         .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
-            info!("Got websocket connection requesting protocols: {0:?}", upgrade.protocols().map(|p| p.format(",")));
+            log::info!("Got websocket connection requesting protocols: {0:?}", upgrade.protocols().map(|p| p.format(",")));
             upgrade
                 .on_upgrade(WebsocketHandler)
                 .with_protocol(WEBSOCKET_PROTOCOL)
@@ -154,22 +153,22 @@ async fn run_wifi_station(mut wifi_controller: WifiController<'static>) -> ! {
     wifi_controller.set_config(&WifiConfig::Station(station_config))
         .expect("Failed to set wifi controller station configuration");
 
-    info!("Attempting to connect to wifi station with ssid={SSID}");
+    log::info!("Attempting to connect to wifi station with ssid={SSID}");
 
     const RETRY_DURATION: Duration = Duration::from_secs(10);
     loop {
         match wifi_controller.connect_async().await {
             Err(err) => {
-                error!("Wifi failed to connect: {err:?}");
+                log::error!("Wifi failed to connect: {err:?}");
                 Timer::after(RETRY_DURATION).await;
                 continue;
             },
-            Ok(res) => info!("Wifi connected successfully: {res:?}"),
+            Ok(res) => log::info!("Wifi connected successfully: {res:?}"),
         }
         match wifi_controller.wait_for_disconnect_async().await {
-            Ok(res) => info!("Wifi disconnected gracefully: {res:?}"),
-            Err(err) => error!("Wifi disconnected with an error: {err:?}"),
+            Ok(res) => log::info!("Wifi disconnected gracefully: {res:?}"),
+            Err(err) => log::error!("Wifi disconnected with an error: {err:?}"),
         }
-        info!("Attempting to reconnect to wifi station after disconnecting...");
+        log::info!("Attempting to reconnect to wifi station after disconnecting...");
     }
 }
