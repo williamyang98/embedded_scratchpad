@@ -21,7 +21,6 @@ extern crate alloc;
 use alloc::{
     string::ToString,
     vec,
-    boxed::Box,
     sync::Arc,
 };
 
@@ -32,6 +31,8 @@ pub struct WebServer {
 }
 
 impl WebServer {
+    // NOTE: this uses a massive amount of stack space which can cause stack overflows
+    //       specifically run_web_stack(...) which instantiates and runs picoserve::Server
     pub async fn run(mut self) -> ! {
         let _ = join3(
             self.net_runner.run(),
@@ -131,6 +132,7 @@ impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
     }
 }
 
+
 async fn run_web_stack(net_stack: Stack<'static>) -> ! {
     log::info!("Waiting for network stack to connection to station...");
     net_stack.wait_config_up().await;
@@ -138,8 +140,7 @@ async fn run_web_stack(net_stack: Stack<'static>) -> ! {
     log::info!("Network stack established on {config:?}");
 
     let app_state = AppState::default();
-
-    let router = Box::new(picoserve::Router::new())
+    let router = picoserve::Router::new()
         .route("/", get(async || { "Hello World!" }))
         .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
             log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
@@ -154,16 +155,15 @@ async fn run_web_stack(net_stack: Stack<'static>) -> ! {
         }))
         .with_state(app_state);
 
+    let mut http_buffer = vec![0; 2048];
+    let config = picoserve::Config::const_default().keep_connection_alive();
+    let server = picoserve::Server::new(&router, &config, &mut http_buffer);
+
     let port = 80;
     let mut tcp_rx_buffer = vec![0; 1024];
     let mut tcp_tx_buffer = vec![0; 1024];
-    let mut http_buffer = vec![0; 2048];
-
-    let config = picoserve::Config::const_default().keep_connection_alive();
     let task_id: usize = 0;
-
-    Box::new(picoserve::Server::new(&router, &config, &mut http_buffer))
-        .listen_and_serve(task_id, net_stack, port, &mut tcp_rx_buffer, &mut tcp_tx_buffer)
+    server.listen_and_serve(task_id, net_stack, port, &mut tcp_rx_buffer, &mut tcp_tx_buffer)
         .await
         .into_never()
 }

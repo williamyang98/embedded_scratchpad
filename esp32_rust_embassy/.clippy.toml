@@ -1,2 +1,3 @@
 # avoid making the heap too big to prevent it from colliding with the stack space
-stack-size-threshold = 32768
+# anything that requires a large stack size should be run in main(...) which has relaxed stack size limitations
+stack-size-threshold = 8192

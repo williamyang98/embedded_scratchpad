@@ -78,13 +78,17 @@ smoltcp = { version = "0.13.1", default-features = false, features = [
   "socket-tcp",
   "socket-udp",
 ] }
-picoserve = { version = "0.19.0", features = [
-  "log",
-  "alloc",
-  "embassy",
-  "json",
-  "ws",
-] }
+picoserve = {
+  git = "https://github.com/sammhicks/picoserve.git",
+  rev = "refs/pull/115/head",
+  features = [
+    "log",
+    "alloc",
+    "embassy",
+    "json",
+    "ws",
+  ],
+}
 
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
