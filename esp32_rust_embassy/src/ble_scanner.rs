@@ -2,10 +2,10 @@ use core::cell::RefCell;
 use bt_hci::{
     cmd::le::LeSetScanParams,
     controller::ControllerCmdSync,
-    param::LeAdvReportsIter,
+    param::{LeAdvReport, LeAdvReportsIter},
 };
 use embassy_futures::join::join;
-use embassy_time::Duration;
+use embassy_time::{Duration, Timer};
 use trouble_host::prelude::*;
 
 extern crate alloc;
@@ -29,16 +29,18 @@ where
     let address: Address = Address::random([0xff, 0x8f, 0x1b, 0x05, 0xe4, 0xff]);
     log::info!("Assigned our bluetooth address={:?}", address);
 
-    let mut resources: Box<HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX>> =
-        Box::new(HostResources::new());
+    type TroubleResources = HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX>;
+    let mut resources: Box<TroubleResources> = Box::new(TroubleResources::new());
+    log::info!("trouBLE host resources takes up {0} bytes", core::mem::size_of::<TroubleResources>());
+
     let stack = Box::new(trouble_host::new(controller, &mut resources))
         .set_random_address(address);
     let host = stack.build();
     let mut runner = host.runner;
     let central = host.central;
 
-    let run_scanner = async move || -> ! {
-        let mut scanner = Box::new(Scanner::new(central));
+    let run_scanner = async move || {
+        let mut scanner = Scanner::new(central);
         let config = ScanConfig {
             active: true,
             phys: PhySet::M1,
@@ -46,21 +48,46 @@ where
             window: Duration::from_secs(1),
             ..Default::default()
         };
-        let mut _session = scanner.scan(&config).await.unwrap();
+
+        log::info!("Attempting to start a trouBLE scan session");
+        let mut total_fails: u32 = 0;
+        let _session = loop {
+            match scanner.scan(&config).await {
+                Ok(session) => {
+                    // FIXME: For some reason no session is created when running on core 1
+                    log::info!("Started an active trouBLE scan session");
+                    break session;
+                },
+                Err(err) => {
+                    total_fails += 1;
+                    log::error!("trouBLE scan session failed to start with err={err:?}, total_fails={total_fails}. Retrying...");
+                    Timer::after(Duration::from_secs(5)).await;
+                },
+            }
+        };
+
+        // keep session active for listener
         loop {
             core::future::pending::<()>().await;
-            log::error!("bluetooth scanning loop somehow broke free from its indefinite scanning time");
         }
     };
 
-    let device_tracker = DeviceTracker::new(128);
+    let mut run_listener = async move || {
+        let device_tracker = DeviceTracker::new(128);
+        log::info!("Starting running trouBLE listener");
+        if let Err(err) = runner.run_with_handler(&device_tracker).await {
+            log::error!("trouBLE listener ended with an error: {err:?}");
+        } else {
+            log::info!("trouBLE listener closed down gracefully");
+        }
+    };
+
     let _ = join(
-        runner.run_with_handler(&device_tracker),
         run_scanner(),
+        run_listener(),
     ).await;
 
     loop {
-        log::error!("bluetooth tasks somehow finished even though they were meant to be indefinite");
         core::future::pending::<()>().await;
     }
 }
@@ -82,7 +109,7 @@ fn display_address(addr: &BdAddr) -> impl Display {
 }
 
 impl EventHandler for DeviceTracker {
-    fn on_adv_reports(&self, mut it: LeAdvReportsIter<'_>) {
+    fn on_adv_reports(&self, reports: LeAdvReportsIter<'_>) {
         let mut addresses = match self.addresses.try_borrow_mut() {
             Ok(addresses) => addresses,
             Err(err) => {
@@ -90,7 +117,8 @@ impl EventHandler for DeviceTracker {
                 return;
             },
         };
-        while let Some(Ok(report)) = it.next() {
+
+        let mut push_report = move |report: LeAdvReport<'_>| {
             let report_address = report.addr;
             let is_new_address = addresses.iter().find(|address| address.raw() == report_address.raw()).is_none();
             if is_new_address {
@@ -102,6 +130,15 @@ impl EventHandler for DeviceTracker {
                 }
             }
             addresses.push_back(report.addr);
+        };
+
+        for report in reports {
+            match report {
+                Ok(report) => push_report(report),
+                Err(err) => {
+                    log::error!("Got a mangled trouBLE report: {err:?}");
+                },
+            }
         }
     }
 }

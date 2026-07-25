@@ -11,14 +11,6 @@
 // the compiler to parse the AST extremely deep
 #![recursion_limit = "256"]
 
-use bt_hci::controller::ExternalController;
-use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
-use embassy_sync::{
-    channel::Channel,
-    blocking_mutex::raw::CriticalSectionRawMutex,
-};
-use embassy_net as net;
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
@@ -38,21 +30,34 @@ use esp_hal::{
     },
     peripherals::{LEDC, GPIO2},
 };
+// rtos
 use esp_rtos::embassy::Executor;
-use esp_radio::ble::controller::BleConnector;
-use static_cell::StaticCell;
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
+use embassy_sync::{
+    channel::Channel,
+    blocking_mutex::raw::CriticalSectionRawMutex,
+};
+// wifi and bluetooth radio
+use bt_hci::controller::ExternalController;
+use esp_radio::{
+    wifi,
+    ble::controller::BleConnector,
+};
+// web server
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
     web_server::WebServer,
 };
+use embassy_net as net;
 
 extern crate alloc;
 use alloc::boxed::Box;
+use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
-
 static CORE_1_STACK: StaticCell<Box<Stack<8192>>> = StaticCell::new();
 static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
@@ -102,7 +107,10 @@ async fn main_core_0(spawner: Spawner) -> ! {
     esp_rtos::start(timer_group_0.timer0, software_interrupt_control.software_interrupt0);
     log::info!("esp_rtos started first executor on core 0");
 
-    let (wifi_controller, interfaces) = esp_radio::wifi::new(peripherals.WIFI, Default::default())
+    // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
+    // esp_radio::init() must be called on the first core
+    log::info!("Start initialising esp radio");
+    let (wifi_controller, interfaces) = wifi::new(peripherals.WIFI, Default::default())
         .expect("Failed to initialize Wi-Fi controller");
     let ble_connector = BleConnector::new(peripherals.BT, Default::default())
         .expect("Failed to initialize BLE connector");
@@ -125,12 +133,9 @@ async fn main_core_0(spawner: Spawner) -> ! {
         net_stack,
         net_runner,
     };
-
-
-    log::info!("Configured all peripherals");
+    log::info!("Finished initialising esp radio");
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
-
     let core_1_stack = CORE_1_STACK.init(Box::new(Stack::new()));
     esp_rtos::start_second_core(
         peripherals.CPU_CTRL,
@@ -148,15 +153,13 @@ async fn main_core_0(spawner: Spawner) -> ! {
     );
     log::info!("esp_rtos started second executor on core 1");
 
-    // FIXME: Have bluetooth on core 0 since the interrupt for packets doesn't seem to work on core 1
-    //        esp_radio::init() must be called on the first core
-    // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
+    // FIXME: Trying to start a trouBLE scan session after attaching listener hangs on core 1 which doesn't make sense
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
     spawner.spawn(send_messages_task(messages_channel).unwrap());
     log::info!("core 0 running all tasks");
 
     // web server allocates a large stack for picoserve::Server so do this inside main where we permit it
-    log::info!("running large web server task in main");
+    log::info!("running large web server task in main()");
     web_server.run().await;
 }
 
