@@ -11,8 +11,8 @@ use esp_radio::wifi::{
     Config as WifiConfig,
 };
 use picoserve::{
-    routing::get,
-    response::ws,
+    routing::{get, get_service},
+    response::{ws, File, Redirect},
     io,
 };
 use itertools::Itertools;
@@ -132,7 +132,6 @@ impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
     }
 }
 
-
 async fn run_web_stack(net_stack: Stack<'static>) -> ! {
     log::info!("Waiting for network stack to connection to station...");
     net_stack.wait_config_up().await;
@@ -141,7 +140,11 @@ async fn run_web_stack(net_stack: Stack<'static>) -> ! {
 
     let app_state = AppState::default();
     let router = picoserve::Router::new()
-        .route("/", get(async || { "Hello World!" }))
+        .route("/", get(async || Redirect::to("/index.html")))
+        .route("/index.html", get_service(File::html(include_str!("../static/index.html"))))
+        .route("/index.css", get_service(File::css(include_str!("../static/index.css"))))
+        .route("/loader.js", get_service(File::javascript(include_str!("../static/loader.js"))))
+        .route("/AppView.vue", get_service(File::html(include_str!("../static/AppView.vue"))))
         .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
             log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
             // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
