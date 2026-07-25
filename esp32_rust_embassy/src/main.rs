@@ -36,6 +36,7 @@ use esp_hal::{
         channel as ledc_channel,
         channel::ChannelIFace,
     },
+    peripherals::{LEDC, GPIO2},
 };
 use esp_rtos::embassy::Executor;
 use esp_radio::ble::controller::BleConnector;
@@ -66,7 +67,12 @@ static NET_STACK_RESOURCES: StaticCell<net::StackResources<3>> = StaticCell::new
 async fn main_core_0(spawner: Spawner) -> ! {
     esp_println::logger::init_logger_from_env();
 
-    let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
+    let clock_speed = CpuClock::max();
+    // With the radio on for bluetooth and wifi the default board has insufficient power decoupling
+    // Run at a lower speed to prevent bad reads from SPI flash (external) and random crashes
+    // let clock_speed = CpuClock::_160MHz;
+
+    let config = esp_hal::Config::default().with_cpu_clock(clock_speed);
     let peripherals = esp_hal::init(config);
 
     // The following pins are used to bootstrap the chip. They are available
@@ -120,27 +126,6 @@ async fn main_core_0(spawner: Spawner) -> ! {
         net_runner,
     };
 
-    // pwm controller for leds that handles fading the pwm duty cycle
-    let mut led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
-    led.set_low();
-    // led.set_high();
-
-    // led_controller -> low_speed_timer -> low_speed_channel -> led_output
-    let mut led_controller = Ledc::new(peripherals.LEDC);
-    led_controller.set_global_slow_clock(LSGlobalClkSource::APBClk);
-    let led_low_speed_timer_0 = LED_LOW_SPEED_TIMER_0.init(led_controller.timer::<LowSpeed>(ledc_timer::Number::Timer0));
-    led_low_speed_timer_0.configure(ledc_timer::config::Config {
-        duty: ledc_timer::config::Duty::Duty5Bit,
-        clock_source: ledc_timer::LSClockSource::APBClk,
-        frequency: Rate::from_khz(24),
-    }).expect("Failed to configure led controller low speed timer");
-
-    let mut led_channel_0 = led_controller.channel::<LowSpeed>(ledc_channel::Number::Channel0, led);
-    led_channel_0.configure(ledc_channel::config::Config {
-        timer: &*led_low_speed_timer_0,
-        duty_pct: 0,
-        drive_mode: DriveMode::PushPull,
-    }).expect("Failed to configure led controller low speed channel");
 
     log::info!("Configured all peripherals");
 
@@ -154,31 +139,24 @@ async fn main_core_0(spawner: Spawner) -> ! {
         move || {
             let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
             core_1_executor.run(|spawner| {
-                spawner.spawn(hello_world_task(messages_channel).unwrap());
-                spawner.spawn(send_messages_task(messages_channel).unwrap());
+                spawner.spawn(receive_messages_task(messages_channel).unwrap());
                 spawner.spawn(print_heap_stats().unwrap());
+                spawner.spawn(led_blink_task(peripherals.LEDC, peripherals.GPIO2).unwrap());
                 log::info!("core 1 running all tasks");
             });
         },
     );
     log::info!("esp_rtos started second executor on core 1");
 
+    // FIXME: Have bluetooth on core 0 since the interrupt for packets doesn't seem to work on core 1
+    //        esp_radio::init() must be called on the first core
     // https://docs.espressif.com/projects/rust/esp-radio/0.18.0/esp32/esp_radio/index.html#running-on-the-second-core
-    // esp_radio::init() needs special core considerations
-    // So we have wifi and bluetooth on core 0 so all the interrupts actually work
-    spawner.spawn(web_server_task(web_server).unwrap());
     spawner.spawn(ble_scanner_task(ble_connector).unwrap());
-    spawner.spawn(led_blink_task(led_channel_0).unwrap());
+    spawner.spawn(send_messages_task(messages_channel).unwrap());
     log::info!("core 0 running all tasks");
 
-    loop {
-        core::future::pending::<()>().await;
-        log::error!("core 0 main somehow woke up from being indefinitely idle");
-    }
-}
-
-#[embassy_executor::task]
-async fn web_server_task(web_server: WebServer) -> ! {
+    // web server allocates a large stack for picoserve::Server so do this inside main where we permit it
+    log::info!("running large web server task in main");
     web_server.run().await;
 }
 
@@ -189,7 +167,7 @@ async fn ble_scanner_task(ble_connector: BleConnector<'static>) -> ! {
 }
 
 #[embassy_executor::task]
-async fn hello_world_task(messages_channel: &'static MessageChannel) -> ! {
+async fn receive_messages_task(messages_channel: &'static MessageChannel) -> ! {
     let mut counter: u32 = 0;
     loop {
         let message = messages_channel.receive().await;
@@ -209,7 +187,29 @@ async fn send_messages_task(messages_channel: &'static MessageChannel) -> ! {
 }
 
 #[embassy_executor::task]
-async fn led_blink_task(led_channel_0: ledc_channel::Channel<'static, LowSpeed>) -> ! {
+async fn led_blink_task(ledc: LEDC<'static>, gpio2: GPIO2<'static>) -> ! {
+    // pwm controller for leds that handles fading the pwm duty cycle
+    let mut led = Output::new(gpio2, Level::Low, OutputConfig::default());
+    led.set_low();
+    // led.set_high();
+
+    // led_controller -> low_speed_timer -> low_speed_channel -> led_output
+    let mut led_controller = Ledc::new(ledc);
+    led_controller.set_global_slow_clock(LSGlobalClkSource::APBClk);
+    let led_low_speed_timer_0 = LED_LOW_SPEED_TIMER_0.init(led_controller.timer::<LowSpeed>(ledc_timer::Number::Timer0));
+    led_low_speed_timer_0.configure(ledc_timer::config::Config {
+        duty: ledc_timer::config::Duty::Duty5Bit,
+        clock_source: ledc_timer::LSClockSource::APBClk,
+        frequency: Rate::from_khz(24),
+    }).expect("Failed to configure led controller low speed timer");
+
+    let mut led_channel_0 = led_controller.channel::<LowSpeed>(ledc_channel::Number::Channel0, led);
+    led_channel_0.configure(ledc_channel::config::Config {
+        timer: &*led_low_speed_timer_0,
+        duty_pct: 0,
+        drive_mode: DriveMode::PushPull,
+    }).expect("Failed to configure led controller low speed channel");
+
     const WAIT_DELAY: Duration = Duration::from_millis(10);
     const MIN_DUTY_CYCLE: u8 = 0;
     const MAX_DUTY_CYCLE: u8 = 50;
