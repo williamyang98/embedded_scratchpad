@@ -1,9 +1,9 @@
 use embassy_net::{Runner, Stack};
 use embassy_time::{Duration, Timer};
-use embassy_futures::join::{join, join3};
+use embassy_futures::join::join3;
 use embassy_sync::{
-    blocking_mutex::raw::NoopRawMutex,
-    channel::Channel,
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    signal::Signal,
 };
 use esp_radio::wifi::{
     Interface, WifiController,
@@ -19,9 +19,10 @@ use itertools::Itertools;
 
 extern crate alloc;
 use alloc::{
-    string::{String, ToString},
+    string::ToString,
     vec,
     boxed::Box,
+    sync::Arc,
 };
 
 pub struct WebServer {
@@ -45,16 +46,29 @@ impl WebServer {
     }
 }
 
-// https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
-// https://www.iana.org/assignments/websocket/websocket.xml#subprotocol-name
-// In javascript: ```let ws = new WebSocket("ws://<HOSTNAME>:<PORT>/ws", ["soap"])```
-static WEBSOCKET_PROTOCOL: &str = "soap";
+#[derive(Debug, Clone, Copy)]
+enum WebsocketControlSignal {
+    ForceClose,
+}
+
+struct AppState {
+    websocket_signal: Arc<Signal<CriticalSectionRawMutex, WebsocketControlSignal>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            websocket_signal: Arc::new(Signal::new()),
+        }
+    }
+}
 
 struct WebsocketHandler;
 
-impl ws::WebSocketCallback for WebsocketHandler {
-    async fn run<R: io::Read, W: io::Write<Error = R::Error>>(
+impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
+    async fn run_with_state<R: io::Read, W: io::Write<Error = R::Error>>(
         self,
+        app_state: &AppState,
         mut rx: ws::SocketRx<R>,
         mut tx: ws::SocketTx<W>,
     ) -> Result<(), W::Error> {
@@ -63,13 +77,12 @@ impl ws::WebSocketCallback for WebsocketHandler {
             futures::Either,
         };
 
-        let messages_channel = Box::new(Channel::<NoopRawMutex, String, 3>::new());
-        let mut message_buffer = vec![0; 128];
+        let mut message_buffer = vec![0; 32];
 
-        type ExitCode<'a> = (u16, &'a str);
-        let close_reason: Option<ExitCode> = loop {
+        type WebsocketCloseReason<'a> = (u16, &'a str);
+        let close_reason: Option<WebsocketCloseReason> = loop {
             let message = rx
-                .next_message(&mut message_buffer, messages_channel.receive())
+                .next_message(&mut message_buffer, app_state.websocket_signal.wait())
                 .await?;
 
             let message: Message = match message {
@@ -80,22 +93,20 @@ impl ws::WebSocketCallback for WebsocketHandler {
                         break Some((err.code(), "Websocket reception error"));
                     },
                 },
-                Either::Second(res) => {
-                    log::info!("Websocket async channel result: {res:?}");
-                    continue;
+                Either::Second(signal) => match signal {
+                    WebsocketControlSignal::ForceClose => {
+                        // https://websocket.org/reference/close-codes/
+                        break Some((1000, "Websocket forcefully closed by host"));
+                    },
                 },
             };
 
             log::info!("Message: {message:?}");
             match message {
                 Message::Text(new_message) => {
-                    let (_, tx_res) = join(
-                        messages_channel.send(new_message.into()),
-                        tx.send_text(new_message),
-                    ).await;
-                    if let Err(err) = tx_res {
+                    if let Err(err) = tx.send_text(new_message).await {
                         log::error!("Websocket transmission error: {err:?}");
-                        break None;
+                        return Err(err);
                     }
                 },
                 Message::Binary(message) => {
@@ -103,9 +114,14 @@ impl ws::WebSocketCallback for WebsocketHandler {
                 },
                 Message::Close(reason) => {
                     log::info!("Websocket close reason: {reason:?}");
-                    break None;
+                    break Some((1000, "Websocket acknowledging close message"));
                 },
-                Message::Ping(ping) => tx.send_pong(ping).await?,
+                Message::Ping(ping) => {
+                    if let Err(err) = tx.send_pong(ping).await {
+                        log::error!("Websocket failed to reply to ping with pong: {err:?}");
+                        return Err(err);
+                    }
+                },
                 Message::Pong(pong) => log::info!("Websocket pong: {pong:?}"),
             };
         };
@@ -121,14 +137,22 @@ async fn run_web_stack(net_stack: Stack<'static>) -> ! {
     let config = net_stack.config_v4();
     log::info!("Network stack established on {config:?}");
 
+    let app_state = AppState::default();
+
     let router = Box::new(picoserve::Router::new())
         .route("/", get(async || { "Hello World!" }))
         .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
-            log::info!("Got websocket connection requesting protocols: {0:?}", upgrade.protocols().map(|p| p.format(",")));
+            log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
+            // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
+            // https://www.iana.org/assignments/websocket/websocket.xml#subprotocol-name
+            // In javascript: ```let ws = new WebSocket("ws://<HOSTNAME>:<PORT>/ws", ["soap"])```
+            // static WEBSOCKET_PROTOCOL: &str = "soap";
             upgrade
-                .on_upgrade(WebsocketHandler)
-                .with_protocol(WEBSOCKET_PROTOCOL)
-        }));
+                .on_upgrade_using_state(WebsocketHandler)
+                // Not specifying this means we accept all protocols that are compatible with RFC6455
+                // .with_protocol(WEBSOCKET_PROTOCOL)
+        }))
+        .with_state(app_state);
 
     let port = 80;
     let mut tcp_rx_buffer = vec![0; 1024];
