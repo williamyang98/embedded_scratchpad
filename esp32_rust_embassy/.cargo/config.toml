@@ -2,11 +2,15 @@
 runner = "espflash flash --monitor --chip esp32 --flash-mode qout --flash-freq 80mhz --flash-size 4mb --baud 921600"
 
 [env]
-ESP_LOG="info"
+ESP_LOG = "info"
+# embassy tasks can produce rather deep stack frames in its state machine
+ESP_BACKTRACE_CONFIG_BACKTRACE_FRAMES = "24"
 
 [build]
 rustflags = [
   "-C", "link-arg=-nostartfiles",
+  # Only required on riscv processors for esp-backtrace
+  # "-C", "force-frame-pointers",
 ]
 
 target = "xtensa-esp32-none-elf"
