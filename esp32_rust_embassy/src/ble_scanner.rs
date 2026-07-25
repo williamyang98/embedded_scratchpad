@@ -6,12 +6,16 @@ use bt_hci::{
 };
 use embassy_futures::join::join;
 use embassy_time::Duration;
-use heapless::Deque;
 use trouble_host::prelude::*;
 use log::{info, error};
 
 extern crate alloc;
-use alloc::boxed::Box;
+use alloc::{
+    boxed::Box,
+    collections::VecDeque,
+};
+use itertools::Itertools;
+use core::fmt::Display;
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
@@ -34,19 +38,15 @@ where
     let mut runner = host.runner;
     let central = host.central;
 
-    let printer = Printer {
-        seen: RefCell::new(Box::new(Deque::new())),
-    };
-
     let run_scanner = async move || -> ! {
         let mut scanner = Box::new(Scanner::new(central));
-        let config = Box::new(ScanConfig {
+        let config = ScanConfig {
             active: true,
             phys: PhySet::M1,
             interval: Duration::from_secs(1),
             window: Duration::from_secs(1),
             ..Default::default()
-        });
+        };
         let mut _session = scanner.scan(&config).await.unwrap();
         loop {
             core::future::pending::<()>().await;
@@ -54,8 +54,9 @@ where
         }
     };
 
+    let device_tracker = DeviceTracker::new(128);
     let _ = join(
-        runner.run_with_handler(&printer),
+        runner.run_with_handler(&device_tracker),
         run_scanner(),
     ).await;
 
@@ -65,21 +66,42 @@ where
     }
 }
 
-struct Printer {
-    seen: RefCell<Box<Deque<BdAddr, 128>>>,
+struct DeviceTracker {
+    addresses: RefCell<VecDeque<BdAddr>>,
 }
 
-impl EventHandler for Printer {
+impl DeviceTracker {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            addresses: RefCell::new(VecDeque::with_capacity(capacity))
+        }
+    }
+}
+
+fn display_address(addr: &BdAddr) -> impl Display {
+    addr.raw().iter().format_with("", |byte, f| f(&format_args!("{byte:02X}")))
+}
+
+impl EventHandler for DeviceTracker {
     fn on_adv_reports(&self, mut it: LeAdvReportsIter<'_>) {
-        let mut seen = self.seen.borrow_mut();
+        let mut addresses = match self.addresses.try_borrow_mut() {
+            Ok(addresses) => addresses,
+            Err(err) => {
+                error!("Received BLE device reports while in the middle of processing previous reports: {err:?}");
+                return;
+            },
+        };
         while let Some(Ok(report)) = it.next() {
-            if seen.iter().find(|b| b.raw() == report.addr.raw()).is_none() {
-                info!("Discovered new bluetooth device with address={:02X?}", report.addr.raw());
-                if seen.is_full() && let Some(addr) = seen.pop_front() {
-                    info!("Removing oldest seen bluetooth device with address={:02X?}", addr.raw());
+            let report_address = report.addr;
+            let is_new_address = addresses.iter().find(|address| address.raw() == report_address.raw()).is_none();
+            if is_new_address {
+                info!("Discovered new bluetooth device with address=0x{0}", display_address(&report_address));
+                let is_full = addresses.len() == addresses.capacity();
+                if is_full && let Some(old_address) = addresses.pop_front() {
+                    info!("Removing oldest seen bluetooth device with address=0x{0}", display_address(&old_address));
                 }
-                seen.push_back(report.addr).unwrap();
             }
+            addresses.push_back(report.addr);
         }
     }
 }

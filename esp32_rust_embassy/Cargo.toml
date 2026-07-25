@@ -10,6 +10,7 @@ log = { version = "0.4.27" }
 critical-section = { version = "1.2.0" }
 static_cell = { version = "2.1.1" }
 heapless = { version = "0.9.3" }
+itertools = { version = "0.15.0", default-features = false, features = ["use_alloc"] }
 # embedded
 embedded-io = { version = "0.7.1" }
 embedded-io-async = { version = "0.7.0" }
