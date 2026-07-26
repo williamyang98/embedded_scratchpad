@@ -1,8 +1,7 @@
-use core::cell::RefCell;
 use bt_hci::{
     cmd::le::LeSetScanParams,
     controller::ControllerCmdSync,
-    param::{LeAdvReport, LeAdvReportsIter},
+    param::LeAdvReportsIter,
 };
 use embassy_futures::join::join;
 use embassy_time::{Duration, Timer};
@@ -11,16 +10,15 @@ use trouble_host::prelude::*;
 extern crate alloc;
 use alloc::{
     boxed::Box,
-    collections::VecDeque,
+    sync::Arc,
 };
-use itertools::Itertools;
-use core::fmt::Display;
+use crate::app::App;
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
 const L2CAP_CHANNELS_MAX: usize = 1;
 
-pub async fn ble_scanner_run<C>(controller: C) -> !
+pub async fn ble_scanner_run<C>(controller: C, app: Arc<App>) -> !
 where
     C: Controller + ControllerCmdSync<LeSetScanParams>,
 {
@@ -72,8 +70,8 @@ where
         }
     };
 
-    let mut run_listener = async move || {
-        let device_tracker = DeviceTracker::new(128);
+    let run_listener = async move || {
+        let device_tracker = DeviceTracker::new(app);
         log::info!("Starting running trouBLE listener");
         if let Err(err) = runner.run_with_handler(&device_tracker).await {
             log::error!("trouBLE listener ended with an error: {err:?}");
@@ -93,52 +91,19 @@ where
 }
 
 struct DeviceTracker {
-    addresses: RefCell<VecDeque<BdAddr>>,
+    app: Arc<App>,
 }
 
 impl DeviceTracker {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(app: Arc<App>) -> Self {
         Self {
-            addresses: RefCell::new(VecDeque::with_capacity(capacity))
+            app,
         }
     }
 }
 
-fn display_address(addr: &BdAddr) -> impl Display {
-    addr.raw().iter().format_with("", |byte, f| f(&format_args!("{byte:02X}")))
-}
-
 impl EventHandler for DeviceTracker {
     fn on_adv_reports(&self, reports: LeAdvReportsIter<'_>) {
-        let mut addresses = match self.addresses.try_borrow_mut() {
-            Ok(addresses) => addresses,
-            Err(err) => {
-                log::error!("Received BLE device reports while in the middle of processing previous reports: {err:?}");
-                return;
-            },
-        };
-
-        let mut push_report = move |report: LeAdvReport<'_>| {
-            let report_address = report.addr;
-            let is_new_address = addresses.iter().find(|address| address.raw() == report_address.raw()).is_none();
-            if is_new_address {
-                log::info!("Adding new bluetooth device with address=0x{0} to existing total_devices={1}",
-                    display_address(&report_address), addresses.len());
-                let is_full = addresses.len() == addresses.capacity();
-                if is_full && let Some(old_address) = addresses.pop_front() {
-                    log::info!("Removing oldest seen bluetooth device with address=0x{0}", display_address(&old_address));
-                }
-            }
-            addresses.push_back(report.addr);
-        };
-
-        for report in reports {
-            match report {
-                Ok(report) => push_report(report),
-                Err(err) => {
-                    log::error!("Got a mangled trouBLE report: {err:?}");
-                },
-            }
-        }
+        self.app.read_bluetooth_reports(reports);
     }
 }

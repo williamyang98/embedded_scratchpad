@@ -22,11 +22,12 @@ function connect_to_websocket() {
     });
     websocket.value.addEventListener("message", (event) => {
       if (typeof event.data === "string") {
-        responses.value.push(event.data);
+        const data = event.data;
+        responses.value.push({ type: "text", data });
       } else {
         event.data.arrayBuffer().then((byte_data) => {
           const data = new Uint8Array(byte_data);
-          responses.value.push(event.data);
+          responses.value.push({ type: "binary", data });
         });
       }
     });
@@ -75,8 +76,20 @@ function send_message() {
   <b>Responses ({{ responses.length }})</b>
   <button @click="clear_responses">Clear</button>
 </div>
+<table>
+  <thead>
+    <tr><th>Index</th><th>Type</th><th>Value</th></tr>
+  </thead>
+  <tbody>
+    <tr v-for="(row, index) in responses" :key="index">
+      <td>{{ index }}</td>
+      <td>{{ row.type }}</td>
+      <td v-if="row.type === 'text'">{{ row.data }}</td>
+      <td v-else-if="row.type === 'binary'">[{{ row.data.join(",") }}]</td>
+    </tr>
+  </tbody>
+</table>
 <ol>
-  <li v-for="(response, index) in responses" :key="index">{{ response }}</li>
 </ol>
 </template>
 

@@ -1,17 +1,8 @@
-use embassy_net::{Runner, Stack};
-use embassy_time::{Duration, Timer};
-use embassy_futures::join::join3;
-use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
-    signal::Signal,
-};
-use esp_radio::wifi::{
-    Interface, WifiController,
-    sta::StationConfig,
-    Config as WifiConfig,
-};
+use embassy_net as net;
+use embassy_sync::pubsub::WaitResult;
 use picoserve::{
-    routing::{get, get_service},
+    Config as ServerConfig, Router, Server, AppBuilder, AppRouter,
+    routing::{get, get_service, PathRouter},
     response::{ws, File, Redirect},
     io,
 };
@@ -19,57 +10,19 @@ use itertools::Itertools;
 
 extern crate alloc;
 use alloc::{
-    string::ToString,
     vec,
     sync::Arc,
+    boxed::Box,
 };
+use crate::app::{App, WebsocketWatchValue};
 
-pub struct WebServer {
-    pub wifi_controller: WifiController<'static>,
-    pub net_stack: Stack<'static>,
-    pub net_runner: Runner<'static, Interface<'static>>,
-}
-
-impl WebServer {
-    // NOTE: this uses a massive amount of stack space which can cause stack overflows
-    //       specifically run_web_stack(...) which instantiates and runs picoserve::Server
-    pub async fn run(mut self) -> ! {
-        let _ = join3(
-            self.net_runner.run(),
-            run_web_stack(self.net_stack),
-            run_wifi_station(self.wifi_controller),
-        ).await;
-
-        loop {
-            log::error!("indefinitely running web server tasks somehow all terminated");
-            core::future::pending::<()>().await;
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum WebsocketControlSignal {
-    ForceClose,
-}
-
-struct AppState {
-    websocket_signal: Arc<Signal<CriticalSectionRawMutex, WebsocketControlSignal>>,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            websocket_signal: Arc::new(Signal::new()),
-        }
-    }
-}
 
 struct WebsocketHandler;
 
-impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
+impl ws::WebSocketCallbackWithState<App> for WebsocketHandler {
     async fn run_with_state<R: io::Read, W: io::Write<Error = R::Error>>(
         self,
-        app_state: &AppState,
+        app: &App,
         mut rx: ws::SocketRx<R>,
         mut tx: ws::SocketTx<W>,
     ) -> Result<(), W::Error> {
@@ -78,26 +31,46 @@ impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
             futures::Either,
         };
 
-        let mut message_buffer = vec![0; 32];
-
+        // https://websocket.org/reference/close-codes/
         type WebsocketCloseReason<'a> = (u16, &'a str);
+
+        let mut message_buffer = vec![0; 32];
+        let mut websocket_subscriber = match app.get_websocket_subscriber() {
+            Ok(subscriber) => subscriber,
+            Err(err) => {
+                log::warn!("Rejecting websocket connection because server is overloaded: {err:?}");
+                let close_reason: WebsocketCloseReason = (1013, "Server is busy with other clients");
+                return tx.close(Some(close_reason)).await;
+            },
+        };
+
         let close_reason: Option<WebsocketCloseReason> = loop {
             let message = rx
-                .next_message(&mut message_buffer, app_state.websocket_signal.wait())
+                .next_message(&mut message_buffer, websocket_subscriber.next_message())
                 .await?;
 
             let message: Message = match message {
-                Either::First(res) => match res {
+                Either::First(rx_result) => match rx_result {
                     Ok(message) => message,
                     Err(err) => {
                         log::warn!("Websocket reception error: {err:?}");
                         break Some((err.code(), "Websocket reception error"));
                     },
                 },
-                Either::Second(signal) => match signal {
-                    WebsocketControlSignal::ForceClose => {
-                        // https://websocket.org/reference/close-codes/
-                        break Some((1000, "Websocket forcefully closed by host"));
+                Either::Second(subscriber_result) => match subscriber_result {
+                    WaitResult::Lagged(total_missed) => {
+                        log::info!("Websocket missed {total_missed} messages from host");
+                        tx.send_binary(&[0, total_missed as u8]).await?;
+                        continue;
+                    },
+                    WaitResult::Message(signal) => match signal {
+                        WebsocketWatchValue::ForceClose => {
+                            break Some((1000, "Websocket forcefully closed by host"));
+                        },
+                        WebsocketWatchValue::BluetoothDevicesUpdated { total_added } => {
+                            tx.send_binary(&[1, total_added as u8]).await?;
+                            continue;
+                        },
                     },
                 },
             };
@@ -105,10 +78,7 @@ impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
             log::info!("Message: {message:?}");
             match message {
                 Message::Text(new_message) => {
-                    if let Err(err) = tx.send_text(new_message).await {
-                        log::error!("Websocket transmission error: {err:?}");
-                        return Err(err);
-                    }
+                    tx.send_text(new_message).await?;
                 },
                 Message::Binary(message) => {
                     log::info!("Ignoring binary message: {message:?}")
@@ -118,10 +88,7 @@ impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
                     break Some((1000, "Websocket acknowledging close message"));
                 },
                 Message::Ping(ping) => {
-                    if let Err(err) = tx.send_pong(ping).await {
-                        log::error!("Websocket failed to reply to ping with pong: {err:?}");
-                        return Err(err);
-                    }
+                    tx.send_pong(ping).await?;
                 },
                 Message::Pong(pong) => log::info!("Websocket pong: {pong:?}"),
             };
@@ -132,70 +99,43 @@ impl ws::WebSocketCallbackWithState<AppState> for WebsocketHandler {
     }
 }
 
-async fn run_web_stack(net_stack: Stack<'static>) -> ! {
-    log::info!("Waiting for network stack to connection to station...");
-    net_stack.wait_config_up().await;
-    let config = net_stack.config_v4();
-    log::info!("Network stack established on {config:?}");
+pub struct WebServer {
+    pub app: Arc<App>,
+}
 
-    let app_state = AppState::default();
-    let router = picoserve::Router::new()
-        .route("/", get(async || Redirect::to("/index.html")))
-        .route("/index.html", get_service(File::html(include_str!("../static/index.html"))))
-        .route("/index.css", get_service(File::css(include_str!("../static/index.css"))))
-        .route("/loader.js", get_service(File::javascript(include_str!("../static/loader.js"))))
-        .route("/AppView.vue", get_service(File::html(include_str!("../static/AppView.vue"))))
-        .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
-            log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
-            // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
-            // https://www.iana.org/assignments/websocket/websocket.xml#subprotocol-name
-            // In javascript: ```let ws = new WebSocket("ws://<HOSTNAME>:<PORT>/ws", ["soap"])```
-            // static WEBSOCKET_PROTOCOL: &str = "soap";
-            upgrade
-                .on_upgrade_using_state(WebsocketHandler)
-                // Not specifying this means we accept all protocols that are compatible with RFC6455
-                // .with_protocol(WEBSOCKET_PROTOCOL)
-        }))
-        .with_state(app_state);
+impl AppBuilder for WebServer {
+    type PathRouter = impl PathRouter;
 
+    fn build_app(self) -> Router<Self::PathRouter> {
+        Router::new()
+            .route("/", get(async || Redirect::to("/index.html")))
+            .route("/index.html", get_service(File::html(include_str!("../static/index.html"))))
+            .route("/index.css", get_service(File::css(include_str!("../static/index.css"))))
+            .route("/loader.js", get_service(File::javascript(include_str!("../static/loader.js"))))
+            .route("/AppView.vue", get_service(File::html(include_str!("../static/AppView.vue"))))
+            .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
+                log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
+                // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
+                // https://www.iana.org/assignments/websocket/websocket.xml#subprotocol-name
+                // In javascript: ```let ws = new WebSocket("ws://<HOSTNAME>:<PORT>/ws", ["soap"])```
+                // static WEBSOCKET_PROTOCOL: &str = "soap";
+                upgrade
+                    .on_upgrade_using_state(WebsocketHandler)
+                    // Not specifying this means we accept all protocols that are compatible with RFC6455
+                    // .with_protocol(WEBSOCKET_PROTOCOL)
+            }))
+            .with_state(self.app)
+    }
+}
+
+pub async fn run_server(id: &str, router: &AppRouter<WebServer>, config: &ServerConfig, net_stack: net::Stack<'_>) -> ! {
     let mut http_buffer = vec![0; 2048];
-    let config = picoserve::Config::const_default().keep_connection_alive();
-    let server = picoserve::Server::new(&router, &config, &mut http_buffer);
-
-    let port = 80;
     let mut tcp_rx_buffer = vec![0; 1024];
     let mut tcp_tx_buffer = vec![0; 1024];
-    let task_id: usize = 0;
-    server.listen_and_serve(task_id, net_stack, port, &mut tcp_rx_buffer, &mut tcp_tx_buffer)
+    let server = Box::new(Server::new(router, config, &mut http_buffer));
+    let port = 80;
+    server.listen_and_serve(id, net_stack, port, &mut tcp_rx_buffer, &mut tcp_tx_buffer)
         .await
         .into_never()
 }
 
-async fn run_wifi_station(mut wifi_controller: WifiController<'static>) -> ! {
-    use crate::wifi_credentials::{SSID, PASSWORD};
-    let station_config = StationConfig::default()
-        .with_ssid(SSID)
-        .with_password(PASSWORD.to_string());
-
-    wifi_controller.set_config(&WifiConfig::Station(station_config))
-        .expect("Failed to set wifi controller station configuration");
-
-    log::info!("Attempting to connect to wifi station with ssid={SSID}");
-
-    const RETRY_DURATION: Duration = Duration::from_secs(10);
-    loop {
-        match wifi_controller.connect_async().await {
-            Err(err) => {
-                log::error!("Wifi failed to connect: {err:?}");
-                Timer::after(RETRY_DURATION).await;
-                continue;
-            },
-            Ok(res) => log::info!("Wifi connected successfully: {res:?}"),
-        }
-        match wifi_controller.wait_for_disconnect_async().await {
-            Ok(res) => log::info!("Wifi disconnected gracefully: {res:?}"),
-            Err(err) => log::error!("Wifi disconnected with an error: {err:?}"),
-        }
-        log::info!("Attempting to reconnect to wifi station after disconnecting...");
-    }
-}

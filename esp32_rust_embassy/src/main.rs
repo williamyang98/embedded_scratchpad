@@ -42,27 +42,49 @@ use embassy_sync::{
 use bt_hci::controller::ExternalController;
 use esp_radio::{
     wifi,
+    wifi::{
+        Interface, WifiController,
+        sta::StationConfig,
+        Config as WifiConfig,
+    },
     ble::controller::BleConnector,
 };
 // web server
+use embassy_net as net;
+use picoserve::{AppRouter, AppBuilder, Config as ServerConfig};
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
-    web_server::WebServer,
+    app::{App, MAX_WEBSOCKET_SUBSCRIBERS},
+    web_server::{WebServer, run_server},
+    secrets::{WIFI_SSID, WIFI_PASSWORD},
 };
-use embassy_net as net;
+
 
 extern crate alloc;
-use alloc::boxed::Box;
+use alloc::{
+    boxed::Box,
+    sync::Arc,
+    string::{String, ToString},
+    format,
+};
 use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 type MessageChannel = Channel<CriticalSectionRawMutex, u32, 64>;
-static CORE_1_STACK: StaticCell<Box<Stack<8192>>> = StaticCell::new();
+const CORE_1_STACK_SIZE: usize = 8192;
+static CORE_1_STACK: StaticCell<Box<Stack<CORE_1_STACK_SIZE>>> = StaticCell::new();
 static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
 static LED_LOW_SPEED_TIMER_0: StaticCell<ledc_timer::Timer<'static, LowSpeed>> = StaticCell::new();
-static NET_STACK_RESOURCES: StaticCell<net::StackResources<3>> = StaticCell::new();
+
+// spare server connection to handle only http requests along side multiple websocket connections
+static MAX_SERVER_CONNECTIONS: usize = MAX_WEBSOCKET_SUBSCRIBERS+1;
+// network socket for net runner required
+static MAX_NETWORK_SOCKETS: usize = MAX_SERVER_CONNECTIONS+1; 
+static NET_STACK_RESOURCES: StaticCell<net::StackResources<MAX_NETWORK_SOCKETS>> = StaticCell::new();
+static WEB_SERVER_ROUTER: StaticCell<AppRouter<WebServer>> = StaticCell::new();
+static WEB_SERVER_CONFIG: ServerConfig = ServerConfig::const_default().keep_connection_alive();
 
 #[allow(
     clippy::large_stack_frames,
@@ -128,12 +150,9 @@ async fn main_core_0(spawner: Spawner) -> ! {
         net_stack_resources,
         net_seed,
     );
-    let web_server = WebServer {
-        wifi_controller,
-        net_stack,
-        net_runner,
-    };
     log::info!("Finished initialising esp radio");
+
+    let app = Arc::new(App::default());
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
     let core_1_stack = CORE_1_STACK.init(Box::new(Stack::new()));
@@ -154,19 +173,37 @@ async fn main_core_0(spawner: Spawner) -> ! {
     log::info!("esp_rtos started second executor on core 1");
 
     // FIXME: Trying to start a trouBLE scan session after attaching listener hangs on core 1 which doesn't make sense
-    spawner.spawn(ble_scanner_task(ble_connector).unwrap());
+    spawner.spawn(ble_scanner_task(ble_connector, app.clone()).unwrap());
     spawner.spawn(send_messages_task(messages_channel).unwrap());
+    spawner.spawn(run_network_stack_task(net_runner).unwrap());
+    spawner.spawn(run_wifi_station_task(wifi_controller).unwrap());
     log::info!("core 0 running all tasks");
 
+    log::info!("Waiting for network stack to connection to station...");
+    net_stack.wait_config_up().await;
+    let config = net_stack.config_v4();
+    log::info!("Network stack established on {config:?}");
+
     // web server allocates a large stack for picoserve::Server so do this inside main where we permit it
-    log::info!("running large web server task in main()");
-    web_server.run().await;
+    let web_server = WebServer { app };
+    let web_server_router = WEB_SERVER_ROUTER.init(web_server.build_app());
+    let web_server_config = &WEB_SERVER_CONFIG;
+    log::info!("Spawning server instances to handle {MAX_SERVER_CONNECTIONS} connections");
+    for server_id in 0..MAX_SERVER_CONNECTIONS {
+        let server_id = format!("Server connection {server_id}");
+        spawner.spawn(run_server_task(server_id, web_server_router, web_server_config, net_stack).unwrap());
+    }
+
+    log::info!("core 0 main now idling after spawning all tasks");
+    loop {
+        core::future::pending::<()>().await;
+    }
 }
 
 #[embassy_executor::task]
-async fn ble_scanner_task(ble_connector: BleConnector<'static>) -> ! {
+async fn ble_scanner_task(ble_connector: BleConnector<'static>, app: Arc<App>) -> ! {
     let ble_controller = ExternalController::<_, 1>::new(ble_connector);
-    ble_scanner_run(ble_controller).await;
+    ble_scanner_run(ble_controller, app).await;
 }
 
 #[embassy_executor::task]
@@ -237,3 +274,47 @@ async fn print_heap_stats() -> ! {
         Timer::after(POLL_PERIOD).await;
     }
 }
+
+#[embassy_executor::task]
+async fn run_network_stack_task(mut net_runner: net::Runner<'static, Interface<'static>>) -> ! {
+    net_runner.run().await
+}
+
+#[embassy_executor::task]
+async fn run_wifi_station_task(mut wifi_controller: WifiController<'static>) -> ! {
+    let station_config = StationConfig::default()
+        .with_ssid(WIFI_SSID)
+        .with_password(WIFI_PASSWORD.to_string());
+
+    wifi_controller.set_config(&WifiConfig::Station(station_config))
+        .expect("Failed to set wifi controller station configuration");
+
+    log::info!("Attempting to connect to wifi station with ssid={WIFI_SSID}");
+
+    const RETRY_DURATION: Duration = Duration::from_secs(10);
+    loop {
+        match wifi_controller.connect_async().await {
+            Err(err) => {
+                log::error!("Wifi failed to connect: {err:?}");
+                Timer::after(RETRY_DURATION).await;
+                continue;
+            },
+            Ok(res) => log::info!("Wifi connected successfully: {res:?}"),
+        }
+        match wifi_controller.wait_for_disconnect_async().await {
+            Ok(res) => log::info!("Wifi disconnected gracefully: {res:?}"),
+            Err(err) => log::error!("Wifi disconnected with an error: {err:?}"),
+        }
+        log::info!("Attempting to reconnect to wifi station after disconnecting...");
+    }
+}
+
+#[allow(
+    clippy::large_stack_frames,
+    reason = "The picoserver instance is quite large and uses heapless to do stack allocations"
+)]
+#[embassy_executor::task(pool_size=MAX_SERVER_CONNECTIONS)]
+pub async fn run_server_task(id: String, router: &'static AppRouter<WebServer>, config: &'static ServerConfig, net_stack: net::Stack<'static>) -> ! {
+    run_server(&id, router, config, net_stack).await
+}
+
