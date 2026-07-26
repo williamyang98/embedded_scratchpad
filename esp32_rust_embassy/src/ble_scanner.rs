@@ -19,7 +19,10 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
-use crate::app::{App, BluetoothDevice};
+use crate::{
+    app::App,
+    bluetooth_device::BluetoothDevice,
+};
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;

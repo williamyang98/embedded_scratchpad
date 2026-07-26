@@ -14,10 +14,18 @@ use alloc::{
     sync::Arc,
     boxed::Box,
 };
-use crate::app::{App, WebsocketWatchValue};
-
+use crate::{
+    app::{App, WebsocketWatchValue},
+    heap_stats::HeapStats,
+};
 
 struct WebsocketHandler;
+
+#[repr(u8)]
+enum ResponseHeader {
+    MissedMessages = 0x00,
+    BluetoothUpdate = 0x01,
+}
 
 impl ws::WebSocketCallbackWithState<App> for WebsocketHandler {
     async fn run_with_state<R: io::Read, W: io::Write<Error = R::Error>>(
@@ -60,7 +68,7 @@ impl ws::WebSocketCallbackWithState<App> for WebsocketHandler {
                 Either::Second(subscriber_result) => match subscriber_result {
                     WaitResult::Lagged(total_missed) => {
                         log::info!("Websocket missed {total_missed} messages from host");
-                        tx.send_binary(&[0, total_missed as u8]).await?;
+                        tx.send_binary(&[ResponseHeader::MissedMessages as u8, total_missed as u8]).await?;
                         continue;
                     },
                     WaitResult::Message(signal) => match signal {
@@ -68,7 +76,7 @@ impl ws::WebSocketCallbackWithState<App> for WebsocketHandler {
                             break Some((1000, "Websocket forcefully closed by host"));
                         },
                         WebsocketWatchValue::BluetoothDevicesUpdated { total_added } => {
-                            tx.send_binary(&[1, total_added as u8]).await?;
+                            tx.send_binary(&[ResponseHeader::BluetoothUpdate as u8, total_added as u8]).await?;
                             continue;
                         },
                     },
@@ -112,6 +120,7 @@ impl AppBuilder for WebServer {
             .route("/index.html", get_service(File::html(include_str!("../static/index.html"))))
             .route("/index.css", get_service(File::css(include_str!("../static/index.css"))))
             .route("/loader.js", get_service(File::javascript(include_str!("../static/loader.js"))))
+            .route("/api.js", get_service(File::javascript(include_str!("../static/api.js"))))
             .route("/AppView.vue", get_service(File::html(include_str!("../static/AppView.vue"))))
             .route("/api/v1/ws", get(async |upgrade: ws::WebSocketUpgrade| {
                 log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
@@ -129,6 +138,11 @@ impl AppBuilder for WebServer {
                 async move || {
                     let devices = app.get_bluetooth_devices().await;
                     Json(devices.clone())
+                }
+            }))
+            .route("/api/v1/heap_stats", get({
+                async || {
+                    Json(HeapStats(&esp_alloc::HEAP))
                 }
             }))
             .with_state(self.app)
