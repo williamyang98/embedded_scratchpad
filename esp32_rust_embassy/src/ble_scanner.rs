@@ -3,20 +3,30 @@ use bt_hci::{
     controller::ControllerCmdSync,
     param::LeAdvReportsIter,
 };
-use embassy_futures::join::join;
+use embassy_futures::join::join3;
 use embassy_time::{Duration, Timer};
+use embassy_sync::{
+    channel::Channel,
+    mutex::Mutex,
+    blocking_mutex::raw::NoopRawMutex,
+};
 use trouble_host::prelude::*;
 
 extern crate alloc;
 use alloc::{
     boxed::Box,
+    rc::Rc,
     sync::Arc,
+    vec::Vec,
 };
-use crate::app::App;
+use crate::app::{App, BluetoothDevice};
 
 /// Max number of connections
 const CONNECTIONS_MAX: usize = 1;
 const L2CAP_CHANNELS_MAX: usize = 1;
+
+type NotificationChannel = Channel<NoopRawMutex, usize, 32>;
+type NewDevices = Mutex<NoopRawMutex, Vec<BluetoothDevice>>;
 
 pub async fn ble_scanner_run<C>(controller: C, app: Arc<App>) -> !
 where
@@ -70,8 +80,14 @@ where
         }
     };
 
-    let run_listener = async move || {
-        let device_tracker = DeviceTracker::new(app);
+    let notification_channel = Rc::new(NotificationChannel::new());
+    let new_devices = Rc::new(NewDevices::new(Vec::new()));
+    let device_tracker = DeviceTracker {
+        new_devices: new_devices.clone(),
+        notification_channel: notification_channel.clone(),
+    };
+
+    let mut run_listener = async move || {
         log::info!("Starting running trouBLE listener");
         if let Err(err) = runner.run_with_handler(&device_tracker).await {
             log::error!("trouBLE listener ended with an error: {err:?}");
@@ -80,8 +96,21 @@ where
         }
     };
 
-    let _ = join(
+    // the bluetooth device listener is a synchronous interrupt
+    // have it run on the same core as the asynchronous pump loop
+    // sync_interrupt -> push_reports -> notify_async_loop -> async_pump_runs -> ...
+    // this way we can move reports to an asynchronous context without dropping any reports
+    let run_report_pump = async move || -> ! {
+        loop {
+            let _total_reports_received = notification_channel.receive().await;
+            let mut new_devices = new_devices.lock().await;
+            app.extend_bluetooth_devices(new_devices.drain(..)).await;
+        }
+    };
+
+    let _ = join3(
         run_scanner(),
+        run_report_pump(),
         run_listener(),
     ).await;
 
@@ -91,19 +120,42 @@ where
 }
 
 struct DeviceTracker {
-    app: Arc<App>,
-}
-
-impl DeviceTracker {
-    pub fn new(app: Arc<App>) -> Self {
-        Self {
-            app,
-        }
-    }
+    notification_channel: Rc<NotificationChannel>,
+    new_devices: Rc<NewDevices>,
 }
 
 impl EventHandler for DeviceTracker {
     fn on_adv_reports(&self, reports: LeAdvReportsIter<'_>) {
-        self.app.read_bluetooth_reports(reports);
+        let mut new_devices = match self.new_devices.try_lock() {
+            Ok(new_devices) => new_devices,
+            Err(err) => {
+                log::error!("Attempted to add devices while run_pump acquired it on same core: {err:?}");
+                return;
+            },
+        };
+
+        let mut total_added = 0;
+        for report in reports {
+            match report {
+                Ok(report) => {
+                    let new_device = BluetoothDevice {
+                        event_kind: report.event_kind,
+                        addr_kind: report.addr_kind,
+                        addr: report.addr,
+                        rssi: report.rssi,
+                    };
+                    new_devices.push(new_device);
+                    total_added += 1;
+                },
+                Err(err) => {
+                    log::error!("Got a mangled trouBLE report: {err:?}");
+                },
+            }
+        }
+        drop(new_devices);
+
+        if total_added > 0 && let Err(err) = self.notification_channel.try_send(total_added) {
+            log::error!("Failed to notify run_pump throgh channel: {err:?}");
+        }
     }
 }

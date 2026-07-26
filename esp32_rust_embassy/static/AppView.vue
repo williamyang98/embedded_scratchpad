@@ -8,7 +8,7 @@ const is_websocket_open = computed(() => {
   if (websocket.value === null) return false;
   return websocket_state.value === WebSocket.OPEN;
 });
-const websocket_url = ref(`ws://${document.location.host}/ws`);
+const websocket_url = ref(`ws://${document.location.host}/api/v1/ws`);
 const responses = ref([]);
 const message = ref("Hello World");
 

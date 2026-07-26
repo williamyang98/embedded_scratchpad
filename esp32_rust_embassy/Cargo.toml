@@ -9,7 +9,7 @@ readme = "README.md"
 log = { version = "0.4.27" }
 critical-section = { version = "1.2.0" }
 static_cell = { version = "2.1.1" }
-heapless = { version = "0.9.3" }
+heapless = { version = "0.9.3", features = ["serde"] }
 itertools = { version = "0.15.0", default-features = false, features = ["use_alloc"] }
 # embedded
 embedded-io = { version = "0.7.1" }
@@ -89,6 +89,8 @@ picoserve = {
     "ws",
   ],
 }
+serde = { version = "1.0.229", default-features = false, features = ["derive", "alloc"] }
+serde-json-core = { version = "0.6.0" }
 
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html

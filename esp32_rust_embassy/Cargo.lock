@@ -1062,6 +1062,8 @@ dependencies = [
  "itertools",
  "log",
  "picoserve",
+ "serde",
+ "serde-json-core",
  "smoltcp",
  "static_cell",
  "trouble-host",
@@ -1277,6 +1279,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
 dependencies = [
  "hash32",
+ "serde_core",
  "stable_deref_trait",
 ]
 

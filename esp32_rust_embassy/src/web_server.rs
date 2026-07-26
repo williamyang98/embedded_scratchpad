@@ -3,7 +3,7 @@ use embassy_sync::pubsub::WaitResult;
 use picoserve::{
     Config as ServerConfig, Router, Server, AppBuilder, AppRouter,
     routing::{get, get_service, PathRouter},
-    response::{ws, File, Redirect},
+    response::{ws, File, Redirect, Json},
     io,
 };
 use itertools::Itertools;
@@ -113,7 +113,7 @@ impl AppBuilder for WebServer {
             .route("/index.css", get_service(File::css(include_str!("../static/index.css"))))
             .route("/loader.js", get_service(File::javascript(include_str!("../static/loader.js"))))
             .route("/AppView.vue", get_service(File::html(include_str!("../static/AppView.vue"))))
-            .route("/ws", get(async |upgrade: ws::WebSocketUpgrade| {
+            .route("/api/v1/ws", get(async |upgrade: ws::WebSocketUpgrade| {
                 log::info!("Got websocket connection requesting upgrade with protocols={0:?}", upgrade.protocols().map(|p| p.format(",")));
                 // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols
                 // https://www.iana.org/assignments/websocket/websocket.xml#subprotocol-name
@@ -123,6 +123,13 @@ impl AppBuilder for WebServer {
                     .on_upgrade_using_state(WebsocketHandler)
                     // Not specifying this means we accept all protocols that are compatible with RFC6455
                     // .with_protocol(WEBSOCKET_PROTOCOL)
+            }))
+            .route("/api/v1/bluetooth_devices", get({
+                let app = self.app.clone();
+                async move || {
+                    let devices = app.get_bluetooth_devices().await;
+                    Json(devices.clone())
+                }
             }))
             .with_state(self.app)
     }
