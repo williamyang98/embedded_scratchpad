@@ -41,3 +41,7 @@ export function debounce_timeout(func, timeout_ms) {
   return wrapper;
 }
 
+export function random_u32() {
+  const U32_MAX = 0x100000000;
+  return Math.floor(Math.random() * U32_MAX);
+}

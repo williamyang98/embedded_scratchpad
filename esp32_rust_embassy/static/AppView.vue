@@ -2,7 +2,7 @@
 import { ref, useTemplateRef, computed, watch, onMounted } from "vue";
 import { WEBSOCKET_URL, get_bluetooth_devices, get_heap_stats } from "./api.js";
 import { parse_websocket_response, WebsocketCommandCreator } from "./web_socket.js";
-import { format_bluetooth_address, format_object_to_string, debounce_timeout } from "./utility.js";
+import { format_bluetooth_address, format_object_to_string, debounce_timeout, random_u32 } from "./utility.js";
 
 const websocket = ref(null);
 const websocket_state = ref(WebSocket.CLOSED);
@@ -12,11 +12,17 @@ const is_websocket_open = computed(() => {
   return websocket_state.value === WebSocket.OPEN;
 });
 const websocket_url = ref(WEBSOCKET_URL);
-const responses = ref([]);
 const message = ref("Hello World");
+const is_auto_connect = ref(true);
+const auto_connect_attempts = ref(0);
+
 const led_duty_cycle = ref(0);
 const background_task_message = ref(null);
+const ping_value = ref(null);
+const pong_value = ref(null);
+const is_connection_synchronised = computed(() => ping_value.value === pong_value.value);
 
+const responses = ref([]);
 const bluetooth_devices = ref([]);
 const is_bluetooth_devices_refreshing = ref(false);
 const heap_stats = ref({
@@ -28,6 +34,7 @@ const websocket_command_creator = new WebsocketCommandCreator();
 
 function connect_to_websocket() {
   is_running.value = true;
+  is_auto_connect.value = true;
   try {
     websocket.value = new WebSocket(websocket_url.value);
     websocket_state.value = WebSocket.CONNECTING;
@@ -45,6 +52,9 @@ function connect_to_websocket() {
         });
       }
     });
+    websocket.value.addEventListener("error", (event) => {
+      console.error("Connection with websocket failed: ", event);
+    });
     websocket.value.addEventListener("close", (event) => {
       websocket_state.value = WebSocket.CLOSED;
       websocket.value = null;
@@ -60,6 +70,7 @@ function connect_to_websocket() {
 function disconnect_from_websocket() {
   if (websocket.value === null) return;
   if (websocket_state.value !== WebSocket.OPEN) return;
+  is_auto_connect.value = false;
   websocket.value.close();
 }
 
@@ -110,6 +121,8 @@ function handle_websocket_response(data) {
       led_duty_cycle.value = res.duty_cycle;
     } else if (res.type === "background_task_message") {
       background_task_message.value = res.message;
+    } else if (res.type === "pong") {
+      pong_value.value = res.value;
     } else {
       console.log(res);
     }
@@ -124,15 +137,47 @@ function refresh_led_duty_cycle() {
   websocket.value.send(c.get_led_duty_cycle());
 }
 
+function send_ping() {
+  if (websocket.value === null) return;
+  let c = websocket_command_creator;
+  let value = random_u32();
+  ping_value.value = value;
+  websocket.value.send(c.send_ping(value));
+}
+
 onMounted(() => {
-  connect_to_websocket();
+  if (is_auto_connect.value) {
+    connect_to_websocket();
+  }
   refresh_bluetooth_devices();
   refresh_heap_stats();
 });
 
+let ping_interval_id = ref(null);
+
 watch(is_websocket_open, (is_open) => {
-  if (!is_open) return;
-  refresh_led_duty_cycle();
+  if (ping_interval_id.value !== null) {
+    clearInterval(ping_interval_id.value);
+    ping_interval_id.value = null;
+  }
+  if (is_open) {
+    const PING_INTERVAL_MS = 1000;
+    refresh_led_duty_cycle();
+    ping_interval_id.value = setInterval(() => {
+      try {
+        send_ping();
+      } catch (err) {
+        console.log(`Ping failed: ${err}`);
+        clearInterval(ping_interval_id.value);
+        ping_interval_id.value = null;
+      }
+    }, PING_INTERVAL_MS);
+  } else {
+    if (is_auto_connect.value) {
+      auto_connect_attempts.value += 1;
+      setTimeout(() => connect_to_websocket(), 100);
+    }
+  }
 });
 
 const set_led_duty_cycle = debounce_timeout((led_duty_cycle) => {
@@ -157,15 +202,47 @@ watch(led_duty_cycle, (led_duty_cycle) => {
   <input type="text" v-model="message">
   <button @click="send_message" :disabled="!is_websocket_open">Send</button>
 </div>
+<br>
+<div>
+  <span>Auto connect: </span>
+  <input type="checkbox" v-model.boolean="is_auto_connect">
+</div>
 <div>
   <span>LED: </span>
   <input type="range" v-model.number="led_duty_cycle" min="0" max="100">
   <button @click="refresh_led_duty_cycle" :disabled="!is_websocket_open">Refresh</button>
 </div>
-<div>
-  <span>Background task message: </span>
-  <span>{{ background_task_message === null ? "?" : background_task_message }}</span>
-</div>
+<br>
+<table>
+  <thead>
+    <tr>
+      <th>field</th>
+      <th>value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Background task message</td>
+      <td>{{ background_task_message === null ? "?" : background_task_message }}</td>
+    </tr>
+    <tr>
+      <td>Ping</td>
+      <td>{{ ping_value === null ? "?" : ping_value }}</td>
+    </tr>
+    <tr>
+      <td>Pong</td>
+      <td>{{ pong_value === null ? "?" : pong_value }}</td>
+    </tr>
+    <tr>
+      <td>Connection synchronised</td>
+      <td>{{ is_connection_synchronised }}</td>
+    </tr>
+    <tr>
+      <td>Auto connect attempts</td>
+      <td>{{ auto_connect_attempts }}</td>
+    </tr>
+  </tbody>
+</table>
 <br>
 <div>
   <b>Responses ({{ responses.length }})</b>

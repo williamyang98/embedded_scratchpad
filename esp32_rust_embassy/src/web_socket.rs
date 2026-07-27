@@ -23,6 +23,7 @@ pub struct WebsocketHandler {
 enum CommandHeader {
     SetLedDutyCycle = 0x00,
     GetLedDutyCycle = 0x01,
+    Ping = 0x02,
 }
 
 #[repr(u8)]
@@ -32,6 +33,7 @@ enum ResponseHeader {
     BluetoothUpdate = 0x01,
     GetLedDutyCycle = 0x02,
     BackgroundTaskMessage = 0x03,
+    Pong = 0x04,
     // errors
     EmptyCommand = 0xFC,
     BadCommandLength = 0xFD,
@@ -55,8 +57,12 @@ impl BinaryMessageResponse {
         }
     }
 
-    fn from_bad_length(command: CommandHeader, expected_length: usize) -> Self {
-        vec![ResponseHeader::BadCommandLength as u8, command as u8, expected_length as u8].into()
+    fn from_bad_length(command: CommandHeader, expected_length: usize, given_length: usize) -> Self {
+        vec![ResponseHeader::BadCommandLength as u8, command as u8, expected_length as u8, given_length as u8].into()
+    }
+
+    fn from_bad_value(command: CommandHeader, index: u8, value: u8) -> Self {
+        vec![ResponseHeader::BadCommandValue as u8, command as u8, index, value].into()
     }
 }
 
@@ -72,21 +78,31 @@ async fn handle_binary_message(app: &App, message: &[u8]) -> BinaryMessageRespon
         CommandHeader::SetLedDutyCycle => {
             const EXPECTED_LENGTH: usize = 2;
             if message.len() != EXPECTED_LENGTH {
-                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH);
+                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH, message.len());
             }
             let duty_cycle = message[1];
             if app.led_controller.set_duty_cycle(duty_cycle).is_err() {
-                return vec![ResponseHeader::BadCommandValue as u8, 1, duty_cycle].into();
+                return BinaryMessageResponse::from_bad_value(header, 1, duty_cycle);
             }
             BinaryMessageResponse::None
         },
         CommandHeader::GetLedDutyCycle => {
             const EXPECTED_LENGTH: usize = 1;
             if message.len() != EXPECTED_LENGTH {
-                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH);
+                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH, message.len());
             }
             let duty_cycle = app.led_controller.get_duty_cycle();
             vec![ResponseHeader::GetLedDutyCycle as u8, duty_cycle].into()
+        },
+        CommandHeader::Ping => {
+            const EXPECTED_LENGTH: usize = 5;
+            if message.len() != EXPECTED_LENGTH {
+                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH, message.len());
+            }
+            let mut response = vec![0u8; 5];
+            response[0] = ResponseHeader::Pong as u8;
+            response[1..5].copy_from_slice(&message[1..5]);
+            response.into()
         },
     }
 }

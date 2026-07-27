@@ -2,6 +2,7 @@
 export const CommandHeader = {
   SetLedDutyCycle: 0x00,
   GetLedDutyCycle: 0x01,
+  Ping: 0x02,
 };
 
 export class WebsocketCommandCreator {
@@ -11,6 +12,15 @@ export class WebsocketCommandCreator {
   get_led_duty_cycle() {
     return new Uint8Array([CommandHeader.GetLedDutyCycle]);
   }
+  send_ping(value) {
+    let command = new Uint8Array(5);
+    command[0] = CommandHeader.Ping;
+    let view = new DataView(command.buffer);
+    let value_offset = 1;
+    const IS_LITTLE_ENDIAN = true;
+    view.setUint32(value_offset, value, IS_LITTLE_ENDIAN);
+    return command;
+  }
 }
 
 export const ResponseHeader = {
@@ -18,6 +28,7 @@ export const ResponseHeader = {
   BluetoothUpdate: 0x01,
   GetLedDutyCycle: 0x02,
   BackgroundTaskMessage: 0x03,
+  Pong: 0x04,
   // errors
   EmptyCommand: 0xFC,
   BadCommandLength: 0xFD,
@@ -86,6 +97,15 @@ export function parse_websocket_response(data) {
     let message_offset = 1;
     let message = view.getUint32(message_offset, IS_LITTLE_ENDIAN);
     return { type: "background_task_message", message };
+  }
+  if (header === ResponseHeader.Pong) {
+    const EXPECTED_LENGTH = 5;
+    if (data.length !== EXPECTED_LENGTH) throw BadLengthError(header, EXPECTED_LENGTH, data.length);
+    let view = new DataView(data.buffer);
+    const IS_LITTLE_ENDIAN = true;
+    let value_offset = 1;
+    let value = view.getUint32(value_offset, IS_LITTLE_ENDIAN);
+    return { type: "pong", value };
   }
   if (header === ResponseHeader.EmptyCommand) throw ServerError(header, data);
   if (header === ResponseHeader.BadCommandLength) throw ServerError(header, data);
