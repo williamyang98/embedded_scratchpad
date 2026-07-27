@@ -17,6 +17,7 @@ export const ResponseHeader = {
   MissedMessages: 0x00,
   BluetoothUpdate: 0x01,
   GetLedDutyCycle: 0x02,
+  BackgroundTaskMessage: 0x03,
   // errors
   EmptyCommand: 0xFC,
   BadCommandLength: 0xFD,
@@ -76,6 +77,15 @@ export function parse_websocket_response(data) {
     if (data.length !== EXPECTED_LENGTH) throw BadLengthError(header, EXPECTED_LENGTH, data.length);
     let duty_cycle = data[1];
     return { type: "get_led_duty_cycle", duty_cycle };
+  }
+  if (header === ResponseHeader.BackgroundTaskMessage) {
+    const EXPECTED_LENGTH = 5;
+    if (data.length !== EXPECTED_LENGTH) throw BadLengthError(header, EXPECTED_LENGTH, data.length);
+    let view = new DataView(data.buffer);
+    const IS_LITTLE_ENDIAN = true;
+    let message_offset = 1;
+    let message = view.getUint32(message_offset, IS_LITTLE_ENDIAN);
+    return { type: "background_task_message", message };
   }
   if (header === ResponseHeader.EmptyCommand) throw ServerError(header, data);
   if (header === ResponseHeader.BadCommandLength) throw ServerError(header, data);

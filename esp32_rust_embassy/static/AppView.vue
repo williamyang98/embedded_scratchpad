@@ -15,6 +15,7 @@ const websocket_url = ref(WEBSOCKET_URL);
 const responses = ref([]);
 const message = ref("Hello World");
 const led_duty_cycle = ref(0);
+const background_task_message = ref(null);
 
 const bluetooth_devices = ref([]);
 const is_bluetooth_devices_refreshing = ref(false);
@@ -107,6 +108,8 @@ function handle_websocket_response(data) {
       refresh_bluetooth_devices();
     } else if (res.type === "get_led_duty_cycle") {
       led_duty_cycle.value = res.duty_cycle;
+    } else if (res.type === "background_task_message") {
+      background_task_message.value = res.message;
     } else {
       console.log(res);
     }
@@ -155,9 +158,13 @@ watch(led_duty_cycle, (led_duty_cycle) => {
   <button @click="send_message" :disabled="!is_websocket_open">Send</button>
 </div>
 <div>
-  <span>LED: </button>
+  <span>LED: </span>
   <input type="range" v-model.number="led_duty_cycle" min="0" max="100">
   <button @click="refresh_led_duty_cycle" :disabled="!is_websocket_open">Refresh</button>
+</div>
+<div>
+  <span>Background task message: </span>
+  <span>{{ background_task_message === null ? "?" : background_task_message }}</span>
 </div>
 <br>
 <div>

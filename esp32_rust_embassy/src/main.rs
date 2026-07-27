@@ -45,7 +45,7 @@ use embassy_net as net;
 use picoserve::{AppRouter, AppBuilder, Config as ServerConfig};
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
-    app::{App, MAX_WEBSOCKET_SUBSCRIBERS},
+    app::{App, WebsocketWatchValue, MAX_WEBSOCKET_SUBSCRIBERS},
     led_controller::LedController,
     web_server::{WebServer, run_server},
     secrets::{WIFI_SSID, WIFI_PASSWORD},
@@ -156,13 +156,16 @@ async fn main_core_0(spawner: Spawner) -> ! {
         peripherals.CPU_CTRL,
         software_interrupt_control.software_interrupt1,
         core_1_stack,
-        move || {
-            let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
-            core_1_executor.run(|spawner| {
-                spawner.spawn(receive_messages_task(messages_channel).unwrap());
-                spawner.spawn(print_heap_stats().unwrap());
-                log::info!("core 1 running all tasks");
-            });
+        {
+            let app = app.clone();
+            move || {
+                let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
+                core_1_executor.run(move |spawner| {
+                    spawner.spawn(receive_messages_task(app, messages_channel).unwrap());
+                    spawner.spawn(print_heap_stats().unwrap());
+                    log::info!("core 1 running all tasks");
+                });
+            }
         },
     );
     log::info!("esp_rtos started second executor on core 1");
@@ -202,11 +205,15 @@ async fn ble_scanner_task(ble_connector: BleConnector<'static>, app: Arc<App>) -
 }
 
 #[embassy_executor::task]
-async fn receive_messages_task(messages_channel: &'static MessageChannel) -> ! {
+async fn receive_messages_task(app: Arc<App>, messages_channel: &'static MessageChannel) -> ! {
     let mut counter: u32 = 0;
     loop {
         let message = messages_channel.receive().await;
         log::info!("Hello world counter={counter}, message={message}!");
+        match app.get_websocket_publisher() {
+            Ok(publisher) => publisher.publish_immediate(WebsocketWatchValue::BackgroundTaskMessage { message }),
+            Err(err) => log::error!("Couldn't acquire publisher to send background message: {err:?}"),
+        };
         counter += 1;
     }
 }

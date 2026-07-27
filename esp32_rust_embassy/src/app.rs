@@ -22,11 +22,15 @@ use crate::{
 pub enum WebsocketWatchValue {
     ForceClose,
     BluetoothDevicesUpdated { total_added: usize },
+    BackgroundTaskMessage { message: u32 },
 }
 
 const MAX_WEBSOCKET_VALUES: usize = 16;
-const MAX_WEBSOCKET_PUBLISHERS: usize = 2;
 pub const MAX_WEBSOCKET_SUBSCRIBERS: usize = 3;
+const MAX_WEBSOCKET_PUBLISHERS: usize = 2;
+// list of application publishers
+// 1. bluetooth scanner
+// 2. random number generator
 
 pub type WebsocketChannel = PubSubChannel<CriticalSectionRawMutex, WebsocketWatchValue, MAX_WEBSOCKET_VALUES, MAX_WEBSOCKET_SUBSCRIBERS, MAX_WEBSOCKET_PUBLISHERS>;
 pub type WebsocketPublisher<'a> = Publisher<'a, CriticalSectionRawMutex, WebsocketWatchValue, MAX_WEBSOCKET_VALUES, MAX_WEBSOCKET_SUBSCRIBERS, MAX_WEBSOCKET_PUBLISHERS>;
@@ -85,5 +89,9 @@ impl App {
 
     pub fn get_websocket_subscriber(&self) -> Result<WebsocketSubscriber<'_>, PubSubError> {
         self.websocket_channel.subscriber()
+    }
+
+    pub fn get_websocket_publisher(&self) -> Result<WebsocketPublisher<'_>, PubSubError> {
+        self.websocket_channel.publisher()
     }
 }

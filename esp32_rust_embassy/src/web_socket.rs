@@ -31,6 +31,7 @@ enum ResponseHeader {
     MissedMessages = 0x00,
     BluetoothUpdate = 0x01,
     GetLedDutyCycle = 0x02,
+    BackgroundTaskMessage = 0x03,
     // errors
     EmptyCommand = 0xFC,
     BadCommandLength = 0xFD,
@@ -139,6 +140,13 @@ impl ws::WebSocketCallback for WebsocketHandler {
                         },
                         WebsocketWatchValue::BluetoothDevicesUpdated { total_added } => {
                             tx.send_binary(&[ResponseHeader::BluetoothUpdate as u8, total_added as u8]).await?;
+                            continue;
+                        },
+                        WebsocketWatchValue::BackgroundTaskMessage { message } => {
+                            let mut response = [0u8; 5];
+                            response[0] = ResponseHeader::BackgroundTaskMessage as u8;
+                            response[1..5].copy_from_slice(&message.to_le_bytes());
+                            tx.send_binary(&response).await?;
                             continue;
                         },
                     },
