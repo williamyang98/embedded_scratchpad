@@ -19,16 +19,7 @@ use esp_hal::{
     interrupt::software::SoftwareInterruptControl,
     system::Stack,
     rng::Rng,
-    time::Rate,
-    gpio::{Output, Level, OutputConfig, DriveMode},
-    ledc::{
-        Ledc, LSGlobalClkSource, LowSpeed,
-        timer as ledc_timer,
-        timer::TimerIFace,
-        channel as ledc_channel,
-        channel::ChannelIFace,
-    },
-    peripherals::{LEDC, GPIO2},
+    gpio::{Output, Level, OutputConfig},
 };
 // rtos
 use esp_rtos::embassy::Executor;
@@ -55,10 +46,10 @@ use picoserve::{AppRouter, AppBuilder, Config as ServerConfig};
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
     app::{App, MAX_WEBSOCKET_SUBSCRIBERS},
+    led_controller::LedController,
     web_server::{WebServer, run_server},
     secrets::{WIFI_SSID, WIFI_PASSWORD},
 };
-
 
 extern crate alloc;
 use alloc::{
@@ -76,7 +67,6 @@ const CORE_1_STACK_SIZE: usize = 8192;
 static CORE_1_STACK: StaticCell<Box<Stack<CORE_1_STACK_SIZE>>> = StaticCell::new();
 static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static CHANNEL_MESSAGE: StaticCell<MessageChannel> = StaticCell::new();
-static LED_LOW_SPEED_TIMER_0: StaticCell<ledc_timer::Timer<'static, LowSpeed>> = StaticCell::new();
 
 // spare server connection to handle only http requests along side multiple websocket connections
 static MAX_SERVER_CONNECTIONS: usize = MAX_WEBSOCKET_SUBSCRIBERS+1;
@@ -152,7 +142,13 @@ async fn main_core_0(spawner: Spawner) -> ! {
     );
     log::info!("Finished initialising esp radio");
 
-    let app = Arc::new(App::default());
+    let mut led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
+    led.set_low();
+    // led.set_high();
+
+    let led_controller = LedController::new(peripherals.LEDC, led);
+
+    let app = Arc::new(App::new(led_controller));
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
     let core_1_stack = CORE_1_STACK.init(Box::new(Stack::new()));
@@ -165,7 +161,6 @@ async fn main_core_0(spawner: Spawner) -> ! {
             core_1_executor.run(|spawner| {
                 spawner.spawn(receive_messages_task(messages_channel).unwrap());
                 spawner.spawn(print_heap_stats().unwrap());
-                spawner.spawn(led_blink_task(peripherals.LEDC, peripherals.GPIO2).unwrap());
                 log::info!("core 1 running all tasks");
             });
         },
@@ -223,45 +218,6 @@ async fn send_messages_task(messages_channel: &'static MessageChannel) -> ! {
         let message: u32 = rng.random();
         messages_channel.send(message).await;
         Timer::after(Duration::from_secs(1)).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn led_blink_task(ledc: LEDC<'static>, gpio2: GPIO2<'static>) -> ! {
-    // pwm controller for leds that handles fading the pwm duty cycle
-    let mut led = Output::new(gpio2, Level::Low, OutputConfig::default());
-    led.set_low();
-    // led.set_high();
-
-    // led_controller -> low_speed_timer -> low_speed_channel -> led_output
-    let mut led_controller = Ledc::new(ledc);
-    led_controller.set_global_slow_clock(LSGlobalClkSource::APBClk);
-    let led_low_speed_timer_0 = LED_LOW_SPEED_TIMER_0.init(led_controller.timer::<LowSpeed>(ledc_timer::Number::Timer0));
-    led_low_speed_timer_0.configure(ledc_timer::config::Config {
-        duty: ledc_timer::config::Duty::Duty5Bit,
-        clock_source: ledc_timer::LSClockSource::APBClk,
-        frequency: Rate::from_khz(24),
-    }).expect("Failed to configure led controller low speed timer");
-
-    let mut led_channel_0 = led_controller.channel::<LowSpeed>(ledc_channel::Number::Channel0, led);
-    led_channel_0.configure(ledc_channel::config::Config {
-        timer: &*led_low_speed_timer_0,
-        duty_pct: 0,
-        drive_mode: DriveMode::PushPull,
-    }).expect("Failed to configure led controller low speed channel");
-
-    const WAIT_DELAY: Duration = Duration::from_millis(10);
-    const MIN_DUTY_CYCLE: u8 = 0;
-    const MAX_DUTY_CYCLE: u8 = 50;
-    loop {
-        for i in MIN_DUTY_CYCLE..=MAX_DUTY_CYCLE {
-            led_channel_0.set_duty(i).unwrap();
-            Timer::after(WAIT_DELAY).await;
-        }
-        for i in (MIN_DUTY_CYCLE..=MAX_DUTY_CYCLE).rev() {
-            led_channel_0.set_duty(i).unwrap();
-            Timer::after(WAIT_DELAY).await;
-        }
     }
 }
 

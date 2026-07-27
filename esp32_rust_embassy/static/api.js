@@ -1,8 +1,8 @@
 
 const API_VERSION = "api/v1"
-// const HOSTNAME = document.location.host;
-const HOSTNAME = "192.168.1.124";
-export const WEBSOCKET_URL = `ws://${HOSTNAME}/${API_VERSION}/ws`;
+const HOSTNAME = document.location.host;
+// const HOSTNAME = "192.168.1.124";
+export const WEBSOCKET_URL = `ws://${HOSTNAME}/${API_VERSION}/websocket`;
 const API_URL = `${document.location.protocol}//${HOSTNAME}/${API_VERSION}`;
 
 export async function get_bluetooth_devices() {

@@ -1,6 +1,8 @@
 <script setup>
 import { ref, useTemplateRef, computed, watch, onMounted } from "vue";
 import { WEBSOCKET_URL, get_bluetooth_devices, get_heap_stats } from "./api.js";
+import { parse_websocket_response, WebsocketCommandCreator } from "./web_socket.js";
+import { format_bluetooth_address, format_object_to_string, debounce_timeout } from "./utility.js";
 
 const websocket = ref(null);
 const websocket_state = ref(WebSocket.CLOSED);
@@ -12,11 +14,16 @@ const is_websocket_open = computed(() => {
 const websocket_url = ref(WEBSOCKET_URL);
 const responses = ref([]);
 const message = ref("Hello World");
+const led_duty_cycle = ref(0);
 
 const bluetooth_devices = ref([]);
 const is_bluetooth_devices_refreshing = ref(false);
-const heap_stats = ref({});
+const heap_stats = ref({
+  free: "?",
+  used: "?",
+});
 const is_heap_stats_refreshing = ref(false);
+const websocket_command_creator = new WebsocketCommandCreator();
 
 function connect_to_websocket() {
   is_running.value = true;
@@ -29,12 +36,11 @@ function connect_to_websocket() {
     websocket.value.addEventListener("message", (event) => {
       if (typeof event.data === "string") {
         const data = event.data;
-        responses.value.push({ type: "text", data });
+        responses.value.push({ type: "message", data });
       } else {
         event.data.arrayBuffer().then((byte_data) => {
           const data = new Uint8Array(byte_data);
-          responses.value.push({ type: "binary", data });
-          handle_binary_response(data);
+          handle_websocket_response(data);
         });
       }
     });
@@ -90,41 +96,51 @@ async function refresh_heap_stats() {
   }
 }
 
-const ResponseHeader = {
-    MissedMessages: 0x00,
-    BluetoothUpdate: 0x01,
-};
-
-function handle_binary_response(data) {
-  if (data.length === 0) return;
-  const header = data[0];
-  if (header === ResponseHeader.MissedMessages) {
-    if (data.length !== 2) throw Error(`Expected length of 2`);
-    let total_missed = data[1];
-    console.warn(`Missed ${total_missed} client messages on websocket connection`);
-    return;
+function handle_websocket_response(data) {
+  try {
+    let res = parse_websocket_response(data);
+    if (res.type === "missed_messages") {
+      responses.value.push({ type: "missed_messages", data: { total_missed: res.total_missed } });
+      refresh_bluetooth_devices();
+    } else if (res.type === "bluetooth_update") {
+      responses.value.push({ type: "bluetooth_update", data: { total_added: res.total_added } });
+      refresh_bluetooth_devices();
+    } else if (res.type === "get_led_duty_cycle") {
+      led_duty_cycle.value = res.duty_cycle;
+    } else {
+      console.log(res);
+    }
+  } catch (err) {
+    console.error(err);
   }
-  if (header === ResponseHeader.BluetoothUpdate) {
-    if (data.length !== 2) throw Error(`Expected length of 2`);
-    let total_added = data[1];
-    refresh_bluetooth_devices();
-    return;
-  }
-  console.error(`Unhandled binary response header=${header}, data=[${data.join(',')}]`);
 }
 
-function format_bluetooth_address(addr) {
-  return addr
-    .map(v => v.toString())
-    .map(s => s.padStart(3, "0"))
-    .join(".");
+function refresh_led_duty_cycle() {
+  if (websocket.value === null) return;
+  let c = websocket_command_creator;
+  websocket.value.send(c.get_led_duty_cycle());
 }
 
 onMounted(() => {
+  connect_to_websocket();
   refresh_bluetooth_devices();
   refresh_heap_stats();
-  connect_to_websocket();
 });
+
+watch(is_websocket_open, (is_open) => {
+  if (!is_open) return;
+  refresh_led_duty_cycle();
+});
+
+const set_led_duty_cycle = debounce_timeout((led_duty_cycle) => {
+  if (websocket.value === null) return;
+  let c = websocket_command_creator;
+  websocket.value.send(c.set_led_duty_cycle(led_duty_cycle));
+}, 10);
+
+watch(led_duty_cycle, (led_duty_cycle) => {
+  set_led_duty_cycle(led_duty_cycle);
+})
 
 </script>
 
@@ -137,6 +153,11 @@ onMounted(() => {
 <div>
   <input type="text" v-model="message">
   <button @click="send_message" :disabled="!is_websocket_open">Send</button>
+</div>
+<div>
+  <span>LED: </button>
+  <input type="range" v-model.number="led_duty_cycle" min="0" max="100">
+  <button @click="refresh_led_duty_cycle" :disabled="!is_websocket_open">Refresh</button>
 </div>
 <br>
 <div>
@@ -151,8 +172,9 @@ onMounted(() => {
     <tr v-for="(row, index) in responses" :key="index">
       <td>{{ index }}</td>
       <td>{{ row.type }}</td>
-      <td v-if="row.type === 'text'">{{ row.data }}</td>
-      <td v-else-if="row.type === 'binary'">[{{ row.data.join(",") }}]</td>
+      <td v-if="typeof(row.data) === 'string'">{{ row.data }}</td>
+      <td v-else-if="row.data.join !== undefined">[{{ row.data.join(",") }}]</td>
+      <td v-else>{{ format_object_to_string(row.data) }}</td>
     </tr>
     <tr v-if="responses.length === 0">
       <td colspan="4">No responses</td>

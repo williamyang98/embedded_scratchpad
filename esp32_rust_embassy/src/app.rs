@@ -13,7 +13,10 @@ use alloc::{
 };
 use core::ops::Deref;
 use heapless::Deque;
-use crate::bluetooth_device::BluetoothDevice;
+use crate::{
+    bluetooth_device::BluetoothDevice,
+    led_controller::LedController,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum WebsocketWatchValue {
@@ -35,15 +38,7 @@ pub struct App {
     // https://docs.embassy.dev/embassy-sync/0.8.0/default/blocking_mutex/struct.Mutex.html#method.lock_mut
     // critical_mutex.lock_mut is not inherently safe which is why we use a RefCell as well
     bluetooth_devices: Arc<Mutex<CriticalSectionRawMutex, BluetoothDevices>>,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            websocket_channel: Arc::new(WebsocketChannel::new()),
-            bluetooth_devices: Arc::new(Mutex::new(Box::new(Deque::new()))),
-        }
-    }
+    pub led_controller: Arc<LedController>,
 }
 
 fn display_address(addr: &BdAddr) -> impl Display {
@@ -51,6 +46,14 @@ fn display_address(addr: &BdAddr) -> impl Display {
 }
 
 impl App {
+    pub fn new(led_controller: LedController) -> Self {
+        Self {
+            websocket_channel: Arc::new(WebsocketChannel::new()),
+            bluetooth_devices: Arc::new(Mutex::new(Box::new(Deque::new()))),
+            led_controller: Arc::new(led_controller),
+        }
+    }
+
     pub async fn extend_bluetooth_devices(&self, new_devices: impl Iterator<Item=BluetoothDevice>) {
         let mut devices = self.bluetooth_devices.lock().await;
         let mut total_added = 0;
