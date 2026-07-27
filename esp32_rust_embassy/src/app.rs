@@ -23,7 +23,7 @@ pub enum WebsocketWatchValue {
 
 const MAX_WEBSOCKET_VALUES: usize = 16;
 const MAX_WEBSOCKET_PUBLISHERS: usize = 2;
-pub const MAX_WEBSOCKET_SUBSCRIBERS: usize = 4;
+pub const MAX_WEBSOCKET_SUBSCRIBERS: usize = 3;
 
 pub type WebsocketChannel = PubSubChannel<CriticalSectionRawMutex, WebsocketWatchValue, MAX_WEBSOCKET_VALUES, MAX_WEBSOCKET_SUBSCRIBERS, MAX_WEBSOCKET_PUBLISHERS>;
 pub type WebsocketPublisher<'a> = Publisher<'a, CriticalSectionRawMutex, WebsocketWatchValue, MAX_WEBSOCKET_VALUES, MAX_WEBSOCKET_SUBSCRIBERS, MAX_WEBSOCKET_PUBLISHERS>;

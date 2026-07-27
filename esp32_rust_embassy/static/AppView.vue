@@ -113,6 +113,13 @@ function handle_binary_response(data) {
   console.error(`Unhandled binary response header=${header}, data=[${data.join(',')}]`);
 }
 
+function format_bluetooth_address(addr) {
+  return addr
+    .map(v => v.toString())
+    .map(s => s.padStart(3, "0"))
+    .join(".");
+}
+
 onMounted(() => {
   refresh_bluetooth_devices();
   refresh_heap_stats();
@@ -167,7 +174,7 @@ onMounted(() => {
       <td>{{ index }}</td>
       <td>{{ device.event_kind }}</td>
       <td>{{ device.addr_kind }}</td>
-      <td>{{ device.addr.join(".") }}</td>
+      <td>{{ format_bluetooth_address(device.addr) }}</td>
       <td>{{ device.rssi }}</td>
     </tr>
     <tr v-if="bluetooth_devices.length === 0">
