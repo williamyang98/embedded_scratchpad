@@ -15,11 +15,13 @@ use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
     clock::CpuClock,
-    timer::timg::TimerGroup,
+    time::Duration as EspDuration,
+    timer::timg::{TimerGroup, MwdtStage, Wdt},
     interrupt::software::SoftwareInterruptControl,
     system::Stack,
     rng::Rng,
     gpio::{Output, Level, OutputConfig},
+    peripherals::{TIMG0, TIMG1}
 };
 // rtos
 use esp_rtos::embassy::Executor;
@@ -114,6 +116,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
     // esp_alloc::heap_allocator!(size: 64 * 1024);
 
     let timer_group_0 = TimerGroup::new(peripherals.TIMG0);
+    let timer_group_1 = TimerGroup::new(peripherals.TIMG1);
     let software_interrupt_control = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
 
     esp_rtos::start(timer_group_0.timer0, software_interrupt_control.software_interrupt0);
@@ -158,11 +161,13 @@ async fn main_core_0(spawner: Spawner) -> ! {
         core_1_stack,
         {
             let app = app.clone();
+            let watchdog_timer = timer_group_1.wdt;
             move || {
                 let core_1_executor = CORE_1_EXECUTOR.init(Executor::new());
                 core_1_executor.run(move |spawner| {
                     spawner.spawn(receive_messages_task(app, messages_channel).unwrap());
                     spawner.spawn(print_heap_stats().unwrap());
+                    spawner.spawn(watchdog_timer_core_1_task(watchdog_timer).unwrap());
                     log::info!("core 1 running all tasks");
                 });
             }
@@ -175,6 +180,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
     spawner.spawn(send_messages_task(messages_channel).unwrap());
     spawner.spawn(run_network_stack_task(net_runner).unwrap());
     spawner.spawn(run_wifi_station_task(wifi_controller).unwrap());
+    spawner.spawn(watchdog_timer_core_0_task(timer_group_0.wdt).unwrap());
     log::info!("core 0 running all tasks");
 
     log::info!("Waiting for network stack to connection to station...");
@@ -195,6 +201,31 @@ async fn main_core_0(spawner: Spawner) -> ! {
     log::info!("core 0 main now idling after spawning all tasks");
     loop {
         core::future::pending::<()>().await;
+    }
+}
+
+static WATCHDOG_TIMER_TIMEOUT: EspDuration = EspDuration::from_secs(5);
+static WATCHDOG_TIMER_FEED_PERIOD: Duration = Duration::from_secs(1);
+
+#[embassy_executor::task]
+async fn watchdog_timer_core_0_task(mut watchdog_timer: Wdt<TIMG0<'static>>) -> ! {
+    watchdog_timer.set_timeout(MwdtStage::Stage0, WATCHDOG_TIMER_TIMEOUT);
+    log::info!("Started watchdog timer on core 0");
+    watchdog_timer.enable();
+    loop {
+        watchdog_timer.feed();
+        Timer::after(WATCHDOG_TIMER_FEED_PERIOD).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn watchdog_timer_core_1_task(mut watchdog_timer: Wdt<TIMG1<'static>>) -> ! {
+    watchdog_timer.set_timeout(MwdtStage::Stage0, WATCHDOG_TIMER_TIMEOUT);
+    log::info!("Started watchdog timer on core 1");
+    watchdog_timer.enable();
+    loop {
+        watchdog_timer.feed();
+        Timer::after(WATCHDOG_TIMER_FEED_PERIOD).await;
     }
 }
 
