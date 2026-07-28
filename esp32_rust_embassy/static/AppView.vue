@@ -84,7 +84,7 @@ function send_message() {
   websocket.value.send(message.value);
 }
 
-async function refresh_bluetooth_devices() {
+const refresh_bluetooth_devices = debounce_timeout(async () => {
   if (is_bluetooth_devices_refreshing.value) return;
   is_bluetooth_devices_refreshing.value = true;
   try {
@@ -94,9 +94,9 @@ async function refresh_bluetooth_devices() {
   } finally {
     is_bluetooth_devices_refreshing.value = false;
   }
-}
+}, 1000);
 
-async function refresh_heap_stats() {
+const refresh_heap_stats = debounce_timeout(async () => {
   if (is_heap_stats_refreshing.value) return;
   is_heap_stats_refreshing.value = true;
   try {
@@ -106,7 +106,7 @@ async function refresh_heap_stats() {
   } finally {
     is_heap_stats_refreshing.value = false;
   }
-}
+}, 1000);
 
 function handle_websocket_response(data) {
   try {
@@ -269,7 +269,6 @@ watch(led_duty_cycle, (led_duty_cycle) => {
 <div>
   <b>Bluetooth devices ({{ bluetooth_devices.length }})</b>
   <button @click="refresh_bluetooth_devices" :disabled="is_bluetooth_devices_refreshing">Refresh</button>
-  <button @click="() => bluetooth_devices.length = 0">Clear</button>
 </div>
 <table>
   <thead>
