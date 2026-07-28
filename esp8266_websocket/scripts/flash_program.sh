@@ -4,6 +4,7 @@ APP_NAME=websocket-demo
 SPIFFS_PARTITION="./spiffs_filesystem_partition.bin"
 
 . ./sdkconfig
+set -x
 
 # Refer to ./partitions.csv for partition offsets and size
 python $IDF_PATH/components/esptool_py/esptool/esptool.py\

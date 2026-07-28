@@ -89,8 +89,10 @@ let bind_led_controls = (app) => {
     const LED_ID = 1;
     const LED_SET_CMD = 1;
     const LED_GET_CMD = 2;
+    const LED_RANGE_CMD = 3;
 
     let slider_elems = [];
+    let slider_max_range = 256;
 
     let set_led = (index, value) => {
         let data = new Uint8Array([LED_ID, LED_SET_CMD, index, value]);
@@ -115,6 +117,11 @@ let bind_led_controls = (app) => {
         app.send_ws_data(data);
     };
 
+    let get_led_range = () => {
+        let data = new Uint8Array([LED_ID, LED_RANGE_CMD]);
+        app.send_ws_data(data);
+    };
+
     let create_led_control = (index, value) => {
         let row = document.createElement("tr");
         let col_0 = document.createElement("td");
@@ -124,7 +131,7 @@ let bind_led_controls = (app) => {
         let slider = document.createElement("input");
         slider.type = "range";
         slider.min = "0";
-        slider.max = "127";
+        slider.max = `${slider_max_range}`;
         slider.step = "1";
         slider.value = String(value);
 
@@ -154,6 +161,13 @@ let bind_led_controls = (app) => {
         }
     });
 
+    app.packet_decoder.on_led_range.add((max_range) => {
+        slider_max_range = max_range;
+        for (let elem of slider_elems) {
+            elem.max = `${slider_max_range}`;
+        }
+    });
+
     led_set_all_elem.addEventListener("click", (ev) => {
         ev.preventDefault();
         set_all_leds();
@@ -166,6 +180,7 @@ let bind_led_controls = (app) => {
 
     app.on_connection_change.add((state) => {
         if (state == WebSocket.OPEN) {
+            get_led_range();
             get_all_leds();
         }
     });

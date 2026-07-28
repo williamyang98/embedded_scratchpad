@@ -17,6 +17,7 @@ static const uint8_t PC_IO_RESET = 0x03;
 static const uint8_t PC_IO_STATUS = 0x04;
 static const uint8_t LED_SET = 0x01;
 static const uint8_t LED_GET = 0x02;
+static const uint8_t LED_RANGE = 0x03;
 
 static struct WebsocketClient* dht11_websocket_client = NULL;
 
@@ -132,6 +133,14 @@ static void websocket_on_shifted_pwm_frame(httpd_req_t* request, struct Websocke
         // reply_buffer[0] = LED_CMD;
         // reply_buffer[1] = LED_SET;
         // write_websocket_data(request, reply_buffer, 2);
+    } else if (mode == LED_RANGE) {
+        buffer[0] = LED_CMD;
+        buffer[1] = LED_RANGE;
+        buffer[2] = SHIFTED_PWM_MAX_COUNTER_VALUE;
+        const esp_err_t status = websocket_send_pending_binary_data_sync(client, request, 3);
+        if (status != ESP_OK) {
+            ESP_LOGE(SUBTAG, "failed to send shifted pwm max value: err='%s'", esp_err_to_name(status));
+        }
     } else {
         ESP_LOGW(SUBTAG, "got unhandled shifted pwm command header=%u", mode);
     }

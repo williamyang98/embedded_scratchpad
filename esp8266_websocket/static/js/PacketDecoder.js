@@ -3,6 +3,7 @@ class PacketDecoder {
         this.on_dht11_reading = new Set(); // (humidity, temperature) => {}
         this.on_dht11_error = new Set();  // (error_code) => {}
         this.on_led_reading = new Set(); // (values: Uint8Array) => {}
+        this.on_led_range = new Set(); // (max_range: uint8) => {}
         this.on_pc_status = new Set();  // (is_on) => {}
         this.on_pc_cmd_result = new Set(); // (command, code) => {}
     }
@@ -65,6 +66,7 @@ class PacketDecoder {
     _on_led = (data) => {
         const LED_SET_ID = 1;
         const LED_GET_ID = 2;
+        const LED_RANGE_ID = 3;
         if (data.length < 1) {
             console.error(`Insufficient LED packet length data=${data}`);
             return;
@@ -89,6 +91,18 @@ class PacketDecoder {
             let values = data.slice(2);
             for (let listener of this.on_led_reading) {
                 listener(values);
+            }
+            return;
+        }
+
+        if (id === LED_RANGE_ID) {
+            if (data.length < 2) {
+                console.error(`Insufficient LED packet length for LED_RANGE data=${data}`);
+                return;
+            }
+            let max_range = data[1];
+            for (let listener of this.on_led_range) {
+                listener(max_range);
             }
             return;
         }
