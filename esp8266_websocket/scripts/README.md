@@ -6,10 +6,10 @@
 3. Install xtensa toolchain: ```./scripts/install_xtensa_toolchain.sh```.
 4. Create RTOS SDK virtual python environment: ```python -m venv venv```
 5. Activate python environment: ```source ./venv/bin/activate``` or ```source ./venv/Scripts/activate``` depending on OS.
-6. Install python packages: ```SETUPTOOLS_USE_DISTUTILS=stdlib pip install -r vendor/esp8266-rtos-sdk/requirements.txt``` 
+6. Install sdk python packages: ```SETUPTOOLS_USE_DISTUTILS=stdlib pip install -r ../vendor/esp8266-rtos-sdk/requirements.txt``` 
     - [fix_1](https://stackoverflow.com/a/76882830)
-    - ```cryptography``` library in python may not install correctly on msys2. Just comment it out in ```vendor/esp8266-rtos-sdk/requirements.txt```.
-    - You need to comment it out in ```vendor/esp8266-rtos-sdk/requirements.txt``` because a python script called by their cmake configure setup checks if the requirements are installed
+    - ```cryptography``` library in python may not install correctly on msys2. Just comment it out in ```../vendor/esp8266-rtos-sdk/requirements.txt```.
+    - You need to comment it out in ```../vendor/esp8266-rtos-sdk/requirements.txt``` because a python script called by their cmake configure setup checks if the requirements are installed
     - If you just avoid installing the cryptography module cmake configure fails with a message about missing python dependencies
 
 ## Programming

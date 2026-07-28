@@ -1,3 +1,10 @@
 #!/bin/sh
+BUILD_DIR=./build
 APP_NAME=websocket-demo
-python $IDF_PATH/tools/idf_monitor.py --port $ESPPORT --baud 115200 ./build/$APP_NAME.elf
+
+. ./sdkconfig
+
+python $IDF_PATH/tools/idf_monitor.py\
+ --port $ESPPORT --baud $CONFIG_ESPTOOLPY_MONITOR_BAUD\
+ --toolchain-prefix $CONFIG_SDK_TOOLPREFIX\
+ "$BUILD_DIR/$APP_NAME.elf"

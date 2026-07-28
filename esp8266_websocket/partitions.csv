@@ -1,5 +1,8 @@
-# NOTE: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
-# NOTE: the spiffs storage size must be specified identically here and in the ./scripts/create_spiffs_image.sh
+# The partition offsets and sizes must be matched by the following files
+# - ./scripts/flash_program.sh
+# - ./scripts/flash_server_files.sh
+# - ./scripts/create_server_files.sh
+# - ./sdkconfig
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  0x6000,
 phy_init, data, phy,     0xf000,  0x1000,
