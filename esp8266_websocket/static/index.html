@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="stylesheet" href="/css/index.css">
+    <title>Websocket Demo</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div class="container">
+      <h1>Websocket Demo</h1>
+      <div class="d-flex flex-row w-100">
+        <div class="flex-1" style="margin-right: 1px">
+          <input class="w-100" type="text" id="ws_url_textedit"/>
+        </div>
+        <button id="ws_button">Connect</button>
+      </div>
+      <hr>
+      <h2>DHT11 temperature humidity sensor</h2>
+      <div>
+        <button id="dht11_refresh">Refresh</button>
+        <table>
+          <tr>
+            <th>Temperature</th>
+            <th>Humidity</th>
+            <th>Status</th>
+          </tr>
+          <tr>
+            <td id="dht11_temperature">?</td>
+            <td id="dht11_humidity">?</td>
+            <td id="dht11_status">?</td>
+          </tr>
+        </table>
+      </div>
+      <hr>
+      <h2>LED controls</h2>
+      <div>
+        <button id="led_get_all">Get All</button>
+        <button id="led_set_all">Set All</button>
+        <table id="led_controls">
+          <tr>
+            <th>LED</th>
+            <th>Value</th>
+          </tr>
+        </table> 
+      </div>
+      <hr>
+      <h2>PC Controls</h2>
+      <div>
+        <button id="pc_reset">Reset</button>
+        <button id="pc_power_on">Power on</button>
+        <button id="pc_power_off">Power off</button>
+        <button id="pc_get_status">Get status</button>
+        <div id="pc_status">Status: ?</div>
+      </div>
+
+    </div>
+    <script type="module">
+      import { App } from "./js/App.js";
+      import { bind_app } from "./js/common.js";
+      let app = new App();
+      bind_app(app);
+      window.app = app;
+    </script>
+  </body>
+</html>
