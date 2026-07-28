@@ -6,4 +6,5 @@ Basic ESP8266 sketch which:
 
 Refer to ```./scripts/README.md``` for setup instructions.
 
-![alt text](docs/screenshot_v1.png "Screenshot of website")
+![Breadboard](docs/breadboard.png "Picture of setup on breadboard")
+![Website](docs/screenshot_v1.png "Screenshot of website")
