@@ -27,7 +27,7 @@
 #include "websocket_handler.h"
 #include "wifi_sta.h"
 
-#define INIT_TAG "main-init"
+const char INIT_TAG[] = "main-init";
 
 const gpio_num_t g_dht11_data_pin = GPIO_NUM_2; // extern
 struct PC_IO_Config g_pc_io_config = { // extern
@@ -62,6 +62,8 @@ static esp_err_t init_server(void);
 
 void app_main(void) {
     ESP_LOGI(INIT_TAG, "entering main function!");
+    esp_set_cpu_freq(ESP_CPU_FREQ_160M);
+    ESP_LOGI(INIT_TAG, "Changing cpu to 160MHz");
 
     if (dht11_init(g_dht11_data_pin) == ESP_OK) {
         ESP_LOGI(INIT_TAG, "initialised dht11 sensor on pin: %u", g_dht11_data_pin);
