@@ -1,0 +1,10 @@
+# The partition offsets and sizes must be matched by the following files
+# - ./scripts/flash_program.sh
+# - ./scripts/flash_server_files.sh
+# - ./scripts/create_server_files.sh
+# - ./sdkconfig
+# Name,   Type, SubType, Offset,   Size, Flags
+nvs,      data, nvs,     0x9000,   0x6000,
+phy_init, data, phy,     0xf000,   0x1000,
+factory,  app,  factory, 0x10000,  0x100000,
+storage,  data, spiffs,  0x110000, 0x100000,
