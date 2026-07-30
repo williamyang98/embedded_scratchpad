@@ -4,6 +4,8 @@ extern "C" {
 
 #include "websocket_handler.hpp"
 #include "global_periphs.hpp"
+#include <memory>
+#include <vector>
 #include <esp_log.h>
 #include <esp_err.h>
 
@@ -53,25 +55,20 @@ static void websocket_on_dht11_frame(httpd_req_t* request, struct WebsocketClien
     }
 }
 
-struct AppResponse {
-    const uint8_t* buffer;
-    size_t size;
-};
-
 static void websocket_async_send_app_response(struct WebsocketClient* client, void* _app_response) {
     static const char SUBTAG[] = "response-output-async-websocket-handler";
     assert(client != NULL);
     const struct Websocket* websocket = client->websocket;
     assert(websocket != NULL);
-    struct AppResponse* app_response = (struct AppResponse*)_app_response;
-    assert(app_response != NULL);
 
-    const uint8_t* src_buffer = app_response->buffer;
-    const size_t src_size = app_response->size;
-    free(app_response);
+    assert(_app_response != NULL);
+    auto app_response = std::unique_ptr<std::vector<uint8_t>>(static_cast<std::vector<uint8_t>*>(_app_response));
 
+    const uint8_t* src_buffer = app_response->data();
+    const size_t src_size = app_response->size();
     uint8_t* dest_buffer = websocket->transmit_buffer;
     assert(dest_buffer != NULL);
+    assert(src_buffer != NULL);
     assert(websocket->transmit_buffer_size >= src_size);
     memcpy(dest_buffer, src_buffer, src_size);
 
@@ -87,11 +84,14 @@ static void on_app_response_callback(const uint8_t* buffer, size_t size, void* _
     static const char SUBTAG[] = "response-output-callback";
     struct WebsocketClient* client = (struct WebsocketClient*)_client;
     assert(client != NULL);
-    struct AppResponse* app_response = (struct AppResponse*)malloc(sizeof(AppResponse));
-    assert(app_response != NULL);
-    app_response->buffer = buffer;
-    app_response->size = size;
-    const esp_err_t status = websocket_queue_async_task(client, websocket_async_send_app_response, (void*)app_response);
+
+    // need to copy this since websocket_queue_async may take some time
+    // which can result in the scratch buffer used by ResponseOutput to be overwritten with another response
+    auto app_response = std::unique_ptr<std::vector<uint8_t>>(new std::vector<uint8_t>);
+    app_response->resize(size);
+    memcpy(app_response->data(), buffer, size);
+
+    const esp_err_t status = websocket_queue_async_task(client, websocket_async_send_app_response, app_response.release());
     if (status != ESP_OK) {
         ESP_LOGE(SUBTAG, "failed to queue async app response: websocket_fd=%d, buffer_size=%u, error='%s'",
             client->websocket_fd, size, esp_err_to_name(status)

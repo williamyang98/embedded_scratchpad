@@ -64,7 +64,9 @@ private:
 public:
     ResponseOutput() {}
     size_t write(const uint8_t* buffer, size_t size) {
-        // TODO: hook up to websocket
+        for (const auto& handler: m_handlers) {
+            handler.callback(buffer, size, handler.args);
+        }
         return size;
     }
     esp_err_t attach_callback(Callback callback, void* args) {
