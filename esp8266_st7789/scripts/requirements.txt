@@ -7,3 +7,5 @@ scikit-learn==1.7.2
 pyserial==3.5
 ephem==4.2.1
 requests==2.34.2
+typing==3.7.4
+typing_extensions==4.16.0

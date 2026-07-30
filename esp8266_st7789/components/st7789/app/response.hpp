@@ -55,7 +55,6 @@ public:
 #ifdef TEST_HARNESS
 private:
     std::vector<uint8_t> m_large_decoded_buffer;
-    std::vector<uint8_t> m_large_encoded_buffer;
     template <typename T>
     void push_large_value(T x) {
         constexpr size_t N = sizeof(T);
@@ -64,10 +63,6 @@ private:
             m_large_decoded_buffer.push_back(b);
             x = x >> 8;
         }
-    }
-    template <>
-    void push_large_value(uint8_t c) {
-        m_large_decoded_buffer.push_back(c);
     }
     void push_large_array(std::span<const uint8_t> buf) {
         const size_t N = buf.size();
@@ -86,17 +81,12 @@ public:
             reinterpret_cast<const uint8_t*>(message.data()),
             message.length()
         ));
-
-        const size_t decoded_size = m_large_decoded_buffer.size();
-        const size_t max_encoded_size = cobs::get_maximum_encoded_size(decoded_size);
-        m_large_encoded_buffer.resize(max_encoded_size);
-        const size_t encoded_size = cobs::encode(m_large_decoded_buffer.data(), decoded_size, m_large_encoded_buffer.data());
-        Serial.write(m_large_encoded_buffer.data(), encoded_size);
+        m_output.write(m_large_decoded_buffer.data(), m_large_decoded_buffer.size());
     }
     template <class... T>
     void debug_frame(const std::format_string<T...> fmt, T&&... args) {
         const std::string label = std::format(fmt, args...);
-
+        // g_st7789 is in tests/st7789.hpp
         m_large_decoded_buffer.resize(0);
         push_large_value(static_cast<uint8_t>(ResponseHeader::DEBUG_FRAME));
         push_large_value(g_st7789.m_rect.x_start);
@@ -124,11 +114,7 @@ public:
             total_bytes
         ));
 
-        const size_t decoded_size = m_large_decoded_buffer.size();
-        const size_t max_encoded_size = cobs::get_maximum_encoded_size(decoded_size);
-        m_large_encoded_buffer.resize(max_encoded_size);
-        const size_t encoded_size = cobs::encode(m_large_decoded_buffer.data(), decoded_size, m_large_encoded_buffer.data());
-        Serial.write(m_large_encoded_buffer.data(), encoded_size);
+        m_output.write(m_large_decoded_buffer.data(), m_large_decoded_buffer.size());
     }
 #endif
 };

@@ -21,7 +21,7 @@ ST7789 g_st7789(tft::SCREEN_WIDTH, tft::SCREEN_HEIGHT); // extern
 
 class FileInput {
 private:
-    const FILE* m_fp_in;
+    FILE* const m_fp_in;
 public:
     FileInput(FILE* fp_in): m_fp_in(fp_in) {
         #if _WIN32
@@ -40,7 +40,7 @@ public:
 };
 
 int main(int argc, char** argv) {
-    ResponseOutput response_output;
+    ResponseOutput response_output(stdout);
     ResponseSender response_sender(response_output);
     App app(response_sender);
 

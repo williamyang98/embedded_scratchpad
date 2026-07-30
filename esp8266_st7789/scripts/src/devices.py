@@ -3,7 +3,7 @@ import cobs
 from command_creator import CommandSender
 from response_parser import ResponseParser, ResponseHandler
 import threading
-from typing import override
+from typing_extensions import override
 import logging
 
 logger = logging.getLogger(__name__)
