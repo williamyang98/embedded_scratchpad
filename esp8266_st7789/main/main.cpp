@@ -19,21 +19,19 @@ extern "C" {
 #include <esp_spiffs.h>
 #include <esp_system.h>
 #include "dht11.h"
-#include "global_periphs.h"
 #include "webserver.h"
 #include "websocket.h"
-#include "websocket_handler.h"
 #include "wifi_sta.h"
 }
 
 #include "hardware/tft.hpp"
-#include "hardware/response_output.hpp"
 #include "graphics/render_glyphs.hpp"
-#include "app/response.hpp"
-#include "app/app.hpp"
+#include "global_periphs.hpp"
+#include "websocket_handler.hpp"
 
 const char INIT_TAG[] = "main-init";
 
+httpd_handle_t g_http_server = nullptr; // extern
 const gpio_num_t g_dht11_data_pin = GPIO_NUM_2; // extern
 struct Websocket g_websocket = { // extern
     // buffers
@@ -51,7 +49,10 @@ struct Websocket g_websocket = { // extern
     .on_close = NULL,
 };
 
-static httpd_handle_t http_server = NULL;
+ResponseOutput g_response_output; // extern;
+ResponseSender g_response_sender(g_response_output); // extern
+App g_app(g_response_sender); // extern
+CommandParser g_command_parser(g_response_sender, g_app); // extern
 
 static esp_err_t init_nvs(void);
 static esp_err_t init_server(void);
@@ -78,17 +79,12 @@ extern "C" void app_main(void) {
     // ESP_LOGI(INIT_TAG, "starting task scheduler!");
 
     ESP_LOGI(INIT_TAG, "finished initialisation");
-
-    ResponseOutput response_output;
-    ResponseSender response_sender(response_output);
-    App app(response_sender);
     tft::set_brightness(50);
     tft::set_write_mode(false, false);
     g_glyph_rgba_q256_palette_render_settings.x_mirror = false;
     g_glyph_rgba_q256_palette_render_settings.y_mirror = false;
-    app.render_all();
-    app.set_page(AppPage::WEATHER_PAGE);
-    app.render_all();
+    g_app.render_all();
+    g_app.set_page(AppPage::WEATHER_PAGE);
 }
 
 esp_err_t init_server(void) {
@@ -98,7 +94,7 @@ esp_err_t init_server(void) {
     config.server_port = port;
     config.max_uri_handlers = 16; // we are serving many static files
 
-    const esp_err_t start_status = httpd_start(&http_server, &config);
+    const esp_err_t start_status = httpd_start(&g_http_server, &config);
     if (start_status == ESP_OK) {
         ESP_LOGI(INIT_TAG, "created http server on port=%d", port);
     } else {
@@ -106,7 +102,7 @@ esp_err_t init_server(void) {
         return ESP_FAIL;
     }
     
-    const esp_err_t register_status = webserver_register_endpoints(http_server);
+    const esp_err_t register_status = webserver_register_endpoints(g_http_server);
     if (register_status == ESP_OK) {
         ESP_LOGI(INIT_TAG, "registered webserver endpoints on port=%d", port);
     } else {
@@ -114,7 +110,7 @@ esp_err_t init_server(void) {
         return ESP_FAIL;
     }
 
-    const esp_err_t websocket_register_status = websocket_register(http_server, &g_websocket, 64);
+    const esp_err_t websocket_register_status = websocket_register(g_http_server, &g_websocket, 64);
     if (websocket_register_status == ESP_OK) {
         ESP_LOGI(INIT_TAG, "registered websocket handler on port=%d", port);
         websocket_attach_handlers(&g_websocket);

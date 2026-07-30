@@ -1,6 +1,6 @@
 set(SRC_FILES
     "main.cpp"
-    "websocket_handler.c"
+    "websocket_handler.cpp"
     "wifi_sta.c"
 )
 

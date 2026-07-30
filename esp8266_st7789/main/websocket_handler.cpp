@@ -1,10 +1,15 @@
-#include "websocket_handler.h"
-#include "global_periphs.h"
+extern "C" {
 #include "dht11.h"
+}
+
+#include "websocket_handler.hpp"
+#include "global_periphs.hpp"
 #include <esp_log.h>
+#include <esp_err.h>
 
 static const char TAG[] = "websocket-handler";
-static const uint8_t DHT11_CMD = 0x03;
+// Refer to CommandHeader in components/st7789/app/commands.hpp to determine what headers are already taken
+static const uint8_t DHT11_CMD = 0x0A;
 
 static struct WebsocketClient* dht11_websocket_client = NULL;
 
@@ -48,8 +53,54 @@ static void websocket_on_dht11_frame(httpd_req_t* request, struct WebsocketClien
     }
 }
 
+struct AppResponse {
+    const uint8_t* buffer;
+    size_t size;
+};
+
+static void websocket_async_send_app_response(struct WebsocketClient* client, void* _app_response) {
+    static const char SUBTAG[] = "response-output-async-websocket-handler";
+    assert(client != NULL);
+    const struct Websocket* websocket = client->websocket;
+    assert(websocket != NULL);
+    struct AppResponse* app_response = (struct AppResponse*)_app_response;
+    assert(app_response != NULL);
+
+    const uint8_t* src_buffer = app_response->buffer;
+    const size_t src_size = app_response->size;
+    free(app_response);
+
+    uint8_t* dest_buffer = websocket->transmit_buffer;
+    assert(dest_buffer != NULL);
+    assert(websocket->transmit_buffer_size >= src_size);
+    memcpy(dest_buffer, src_buffer, src_size);
+
+    const esp_err_t status = websocket_send_pending_binary_data_async(client, src_size);
+    if (status != ESP_OK) {
+        ESP_LOGE(SUBTAG, "Failed to send app response websocket_fd=%d, buffer_size=%u, error='%s'",
+            client->websocket_fd, src_size, esp_err_to_name(status)
+        );
+    }
+}
+
+static void on_app_response_callback(const uint8_t* buffer, size_t size, void* _client) {
+    static const char SUBTAG[] = "response-output-callback";
+    struct WebsocketClient* client = (struct WebsocketClient*)_client;
+    assert(client != NULL);
+    struct AppResponse* app_response = (struct AppResponse*)malloc(sizeof(AppResponse));
+    assert(app_response != NULL);
+    app_response->buffer = buffer;
+    app_response->size = size;
+    const esp_err_t status = websocket_queue_async_task(client, websocket_async_send_app_response, (void*)app_response);
+    if (status != ESP_OK) {
+        ESP_LOGE(SUBTAG, "failed to queue async app response: websocket_fd=%d, buffer_size=%u, error='%s'",
+            client->websocket_fd, size, esp_err_to_name(status)
+        );
+    }
+}
+
 static void websocket_on_open(httpd_req_t* request, struct WebsocketClient* client) {
-    // pc_io_status_listen(&g_pc_io_config, pc_io_status_listener, (void*)client);
+    g_response_output.attach_callback(on_app_response_callback, (void*)client);
 }
 
 static void websocket_on_binary_frame(httpd_req_t* request, struct WebsocketClient* client, const uint8_t* data, size_t size) {
@@ -67,14 +118,14 @@ static void websocket_on_binary_frame(httpd_req_t* request, struct WebsocketClie
     int cmd_length = size-1;
 
     switch (cmd_code) {
-    case DHT11_CMD: websocket_on_dht11_frame(request, client, cmd_data, cmd_length); break;
-    default:        ESP_LOGD(TAG, "Unknown cmd: 0x%02x", cmd_code); break;
+    case DHT11_CMD: return websocket_on_dht11_frame(request, client, cmd_data, cmd_length);
+    default: g_command_parser.parse_command(data, size); // redirect to app command handler
     }
 }
 
 // client will be freed after this call
 static void websocket_on_close(httpd_req_t* request, struct WebsocketClient* client) {
-    // pc_io_status_unlisten(&g_pc_io_config, pc_io_status_listener, (void*)client);
+    g_response_output.remove_callback(on_app_response_callback, (void*)client);
 }
 
 void websocket_attach_handlers(struct Websocket* websocket) {
