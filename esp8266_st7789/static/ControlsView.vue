@@ -1,7 +1,10 @@
 <script setup>
 import { ref, watchEffect } from "vue";
+import { CommandCreator, WeatherIcon, MoonPhase } from "./web_socket.js";
+import { debounce_timeout } from "./utility.js";
 
 const emits = defineEmits(["command"]);
+const command_creator = new CommandCreator();
 
 const temperature_celcius = ref(254);
 const humidity_percent = ref(105);
@@ -11,8 +14,8 @@ const time_show_24_hour = ref(false);
 const time_show_leading_zeros = ref(false);
 const location = ref("Sydney");
 const weather_description = ref("cloudy rain");
-const weather_icon = ref(0);
-const moon_phase = ref(0);
+const weather_icon = ref(WeatherIcon.WINTER);
+const moon_phase = ref(MoonPhase.NEW_MOON);
 const screen_brightness = ref(50);
 
 function emit_command(command) {
@@ -20,74 +23,51 @@ function emit_command(command) {
 }
 
 function trigger_render() {
-  emit_command({
-    "type": "trigger_render",
-  });
+  emit_command(command_creator.trigger_render());
 }
 
+// bound to slider which emits too many events at once
+const _set_screen_brightness = debounce_timeout((brightness) => {
+  emit_command(command_creator.set_screen_brightness(brightness));
+}, 100);
 function set_screen_brightness() {
-  emit_command({
-    "type": "set_screen_brightness",
-    "screen_brightness": screen_brightness.value,
-  });
+  _set_screen_brightness(screen_brightness.value);
 }
 
 function set_temperature() {
-  emit_command({
-    "type": "set_temperature",
-    "temperature": temperature_celcius.value,
-  });
-}
-
-function set_wind_kph() {
-  emit_command({
-    "type": "set_wind_kph",
-    "wind_kph": wind_kph.value,
-  });
+  emit_command(command_creator.set_temperature(temperature_celcius.value));
 }
 
 function set_humidity() {
-  emit_command({
-    "type": "set_humidity",
-    "humidity": humidity_percent.value,
-  });
+  emit_command(command_creator.set_humidity(humidity_percent.value));
 }
 
 function set_time_24_hour() {
-  emit_command({
-    "type": "set_time_24_hour",
-    "time_24_hour": time_24_hour.value,
-    "show_24_hour": time_show_24_hour.value,
-    "show_leading_zeros": time_show_leading_zeros.value,
-  });
+  emit_command(command_creator.set_24_hour_time(
+    time_24_hour.value,
+    time_show_24_hour.value,
+    time_show_leading_zeros.value,
+  ));
+}
+
+function set_wind_kph() {
+  emit_command(command_creator.set_wind_kph(wind_kph.value));
 }
 
 function set_location() {
-  emit_command({
-    "type": "set_location",
-    "location": location.value,
-  });
+  emit_command(command_creator.set_location(location.value.toUpperCase()));
 }
 
 function set_weather_description() {
-  emit_command({
-    "type": "set_weather_description",
-    "description": weather_description.value,
-  });
+  emit_command(command_creator.set_weather_description(weather_description.value.toUpperCase()));
 }
 
 function set_weather_icon() {
-  emit_command({
-    "type": "set_weather_icon",
-    "icon": weather_icon.value,
-  });
+  emit_command(command_creator.set_weather_icon(weather_icon.value));
 }
 
 function set_moon_phase() {
-  emit_command({
-    "type": "set_moon_phase",
-    "phase": moon_phase.value,
-  });
+  emit_command(command_creator.set_moon_phase(moon_phase.value));
 }
 
 watchEffect(set_screen_brightness);
@@ -164,24 +144,24 @@ defineExpose({
   <div>
     <label>Moon phase: </label>
     <select v-model.number="moon_phase">
-      <option value="0">new moon</option>
-      <option value="1">waxing crescent</option>
-      <option value="2">first quarter</option>
-      <option value="3">waxing gibbous</option>
-      <option value="4">full moon</option>
-      <option value="5">waning gibbous</option>
-      <option value="6">third quarter</option>
-      <option value="7">waning crescent</option>
+      <option :value="MoonPhase.NEW_MOON">new moon</option>
+      <option :value="MoonPhase.WAXING_CRESCENT">waxing crescent</option>
+      <option :value="MoonPhase.FIRST_QUARTER">first quarter</option>
+      <option :value="MoonPhase.WAXING_GIBBOUS">waxing gibbous</option>
+      <option :value="MoonPhase.FULL_MOON">full moon</option>
+      <option :value="MoonPhase.WANING_GIBBOUS">Waning gibbous</option>
+      <option :value="MoonPhase.THIRD_QUARTER">third quarter</option>
+      <option :value="MoonPhase.WANING_CRESCENT">waning crescent</option>
     </select>
   </div>
   <div>
     <label>Weather icon: </label>
     <select v-model.number="weather_icon">
-      <option value="0">winter</option>
-      <option value="1">lightning storm</option>
-      <option value="2">heavy rain</option>
-      <option value="3">partly cloudy</option>
-      <option value="4">sunny</option>
+      <option :value="WeatherIcon.WINTER">winter</option>
+      <option :value="WeatherIcon.LIGHTNING_STORM">lightning storm</option>
+      <option :value="WeatherIcon.HEAVY_RAIN">heavy rain</option>
+      <option :value="WeatherIcon.PARTLY_CLOUDY">partly cloudy</option>
+      <option :value="WeatherIcon.SUNNY">sunny</option>
     </select>
   </div>
 </form>

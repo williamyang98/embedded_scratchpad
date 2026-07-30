@@ -96,6 +96,7 @@ esp_err_t init_server(void) {
     const uint16_t port = 80;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = port;
+    config.max_uri_handlers = 16; // we are serving many static files
 
     const esp_err_t start_status = httpd_start(&http_server, &config);
     if (start_status == ESP_OK) {

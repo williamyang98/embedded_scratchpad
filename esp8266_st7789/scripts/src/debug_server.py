@@ -4,11 +4,8 @@ import logging
 import os
 import sys
 import threading
-import json
 from aiohttp import web, WSMsgType
 from devices import Device, ProcessDevice, SerialDevice
-from response_parser import ResponseHandler, ResponseParser
-from command_creator import CommandSender, WeatherIcon, MoonPhase
 from typing_extensions import override
 
 logger = logging.getLogger(__name__)
@@ -31,137 +28,6 @@ async def run_blocking(event_loop, callback):
         return result
     raise result
 
-class CustomResponseHandler(ResponseHandler):
-    def __init__(self, websocket, event_loop):
-        self.websocket = websocket
-        self.event_loop = event_loop
-        self.sent_message_tasks = []
-
-    async def wait_messages_sent(self):
-        for task in self.sent_message_tasks:
-            try:
-                await task
-            except Exception as ex:
-                logger.error(f"Failed to send message: {ex}")
-
-    async def send_json(self, data: dict):
-        if self.websocket.closed: return
-        task = asyncio.create_task(self.websocket.send_json(data))
-        self.sent_message_tasks.append(task)
-
-    async def send_data(self, data: bytearray):
-        if self.websocket.closed: return
-        task = asyncio.create_task(self.websocket.send_bytes(data))
-        self.sent_message_tasks.append(task)
-
-    @override
-    async def acknowledge_command(self, header, is_success):
-        await self.send_json({
-            "type": "acknowledge_command",
-            "header": header,
-            "is_success": is_success,
-        })
-
-    @override
-    async def render_status(self, is_busy):
-        await self.send_json({
-            "type": "render_status",
-            "is_busy": is_busy,
-        })
-
-    @override
-    async def log_message(self, message):
-        await self.send_json({
-            "type": "log_message",
-            "message": message,
-        })
-
-    @override
-    async def debug_message(self, message):
-        await self.send_json({
-            "type": "debug_message",
-            "message": message,
-        })
-
-    @override
-    async def debug_frame(self, frame):
-        await self.send_json({
-            "type": "debug_frame",
-            "x_start": frame.x_start,
-            "x_end": frame.x_end,
-            "y_start": frame.y_start,
-            "y_end": frame.y_end,
-            "width": frame.width,
-            "height": frame.height,
-            "x_cursor": frame.x_cursor,
-            "y_cursor": frame.y_cursor,
-            "brightness": frame.brightness,
-            "hardware_reset": frame.hardware_reset,
-            "label": frame.label,
-        })
-        await self.send_data(frame.pixel_data)
-
-class CommandParser:
-    def __init__(self, command_sender):
-        self.command_sender = command_sender
-
-    async def read_command(self, command):
-        try:
-            command = json.loads(command)
-        except Exception as ex:
-            logger.error(f"Failed to parse command: {command}")
-            return
-
-        def get_field(field, _type):
-            value = command.get(field)
-            if value == None:
-                raise Exception(f"Command missing field '{field}'")
-            if not isinstance(value, _type):
-                raise Exception(f"Command field '{field}' expected type '{_type}' but got wrong type '{type(value)}'")
-            return value
-
-        try:
-            _type = get_field("type", str)
-            if _type == "trigger_render":
-                await self.command_sender.trigger_render()
-            elif _type == "set_screen_brightness":
-                screen_brightness = get_field("screen_brightness", int)
-                await self.command_sender.set_screen_brightness(screen_brightness)
-            elif _type == "set_temperature":
-                temperature = get_field("temperature", int)
-                await self.command_sender.set_temperature(temperature)
-            elif _type == "set_humidity":
-                humidity = get_field("humidity", int)
-                await self.command_sender.set_humidity(humidity)
-            elif _type == "set_time_24_hour":
-                time_24_hour = get_field("time_24_hour", int)
-                show_24_hour = get_field("show_24_hour", int)
-                show_leading_zeros = get_field("show_leading_zeros", int)
-                await self.command_sender.set_24_hour_time(time_24_hour, show_24_hour, show_leading_zeros)
-            elif _type == "set_wind_kph":
-                wind_kph = get_field("wind_kph", int)
-                await self.command_sender.set_wind_kph(wind_kph)
-            elif _type == "set_location":
-                location = get_field("location", str)
-                location = location.upper()
-                await self.command_sender.set_location(location)
-            elif _type == "set_weather_description":
-                description = get_field("description", str)
-                description = description.upper()
-                await self.command_sender.set_weather_description(description)
-            elif _type == "set_weather_icon":
-                icon = get_field("icon", int)
-                icon = WeatherIcon(icon)
-                await self.command_sender.set_weather_icon(icon)
-            elif _type == "set_moon_phase":
-                phase = get_field("phase", int)
-                phase = MoonPhase(phase)
-                await self.command_sender.set_moon_phase(phase)
-            else:
-                logger.error(f"Unhandled command type={_type}, command={command}")
-        except Exception as ex:
-            logger.error(ex)
-
 class App:
     def __init__(self, create_device):
         self.create_device = create_device
@@ -175,44 +41,44 @@ class App:
     async def launch_process(self, websocket):
         event_loop = asyncio.get_running_loop()
 
-        response_handler = CustomResponseHandler(websocket, event_loop)
-        response_parser = ResponseParser(response_handler)
         device = await run_blocking(event_loop, lambda: self.create_device(event_loop))
         if device == None:
             logger.error("Failed to create device")
             return
-        command_sender = CommandSender(writer=device.write)
-        command_parser = CommandParser(command_sender)
 
         async def device_read_loop():
             while True:
                 try:
                     buffer = await device.read()
-                    await response_parser.read(buffer)
+                    assert isinstance(buffer, bytearray)
+                    await websocket.send_bytes(buffer)
                 except Exception as ex:
                     logger.info(f"Closing async device read loop: {ex}")
                     break
+            await websocket.close()
 
-        async def websocket_read_loop():
+        device_read_task = asyncio.create_task(device_read_loop())
+
+        try:
             async for message in websocket:
                 if message.type == WSMsgType.TEXT:
-                    await command_parser.read_command(message.data)
+                    logger.info(f"Got message from websocket: {message.data}")
+                elif message.type == WSMsgType.BINARY:
+                    data = bytearray(message.data)
+                    await device.write(data)
                 elif message.type == WSMsgType.CLOSE:
                     logger.info("Websocket async read loop closed down")
                     break
-
-        device_read_task = asyncio.create_task(device_read_loop())
-        try:
-            await websocket_read_loop()
         except Exception as ex:
             logger.error(f"Websocket async read loop failed with: {ex}")
 
         try:
             await run_blocking(event_loop, lambda: device.close())
+            await device_read_task
         except Exception as ex:
             logger.error(f"Failed to wait for device: {ex}")
 
-        await response_handler.wait_messages_sent()
+        logger.info("Ending websocket session")
 
     async def on_cleanup(self, web_app):
         logger.info("Cleaning up")
@@ -220,7 +86,7 @@ class App:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", nargs="?", choices=["process", "serial"], default="process")
-    parser.add_argument("--executable", default="../build/st7789.exe")
+    parser.add_argument("--executable", default="./build/tests/st7789")
     parser.add_argument("--port", default=None, type=str, help="COM port to connect to")
     parser.add_argument("--baudrate", default=9600, type=int, help="Rate to communicate with device")
     parser.add_argument("--list-ports", action="store_true", help="List all COM ports connected to computer")
@@ -298,9 +164,10 @@ def main():
     app = App(create_device)
     web_app = web.Application()
     web_app.on_cleanup.append(app.on_cleanup)
-    web_app.router.add_get("/", lambda request: web.HTTPFound("/index.html"))
-    web_app.router.add_get("/websocket", app.websocket_handler)
+    # main/main.cpp in g_websocket.uri
+    web_app.router.add_get("/api/v1/websocket", app.websocket_handler)
     web_app.router.add_static("/", path=static_dirpath, follow_symlinks=True, append_version=True)
+    web_app.router.add_get("/", lambda request: web.HTTPFound("/index.html"))
     web.run_app(web_app, port=8080)
     return 0
 

@@ -13,6 +13,12 @@ const vue3_sfc_loader_options = {
       getContentData: asBinary => asBinary ? res.arrayBuffer() : res.text(),
     };
   },
+  async loadModule(path, _options) {
+    if (path.endsWith(".js")) {
+      return await import(`${document.location.origin}/${path}`);
+    }
+    return undefined;
+  },
   addStyle(text_content) {
     const style_elem = document.getElementById('vue_generated_styles');
     if (style_elem === null) return;

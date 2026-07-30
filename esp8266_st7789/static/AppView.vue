@@ -3,6 +3,7 @@ import { ref, useTemplateRef, computed, watch, onMounted } from "vue";
 import FrameView from "./FrameView.vue";
 import ControlsView from "./ControlsView.vue";
 import FrameHeaderTable from "./FrameHeaderTable.vue"
+import { parse_websocket_response } from "./web_socket.js";
 
 const frame_elem = useTemplateRef("frame");
 const controls_elem = useTemplateRef("controls");
@@ -18,20 +19,19 @@ const can_send_commands = computed(() => {
   if (websocket.value === null) return false;
   return websocket_state.value === WebSocket.OPEN;
 });
+const websocket_url = `ws://${document.location.host}/api/v1/websocket`;
 
 const is_pin_frame = ref(false);
 const frame_scale = ref(1.0);
 
 function launch_process() {
   is_running.value = true;
-  const websocket_url = `ws://${document.location.host}/websocket`;
   frames.value = [];
 
   if (!is_pin_frame.value) {
     selected_frame_index.value = 0;
   }
 
-  let previous_frame_header = null;
   try {
     websocket.value = new WebSocket(websocket_url);
     websocket_state.value = WebSocket.CONNECTING;
@@ -42,21 +42,19 @@ function launch_process() {
     });
     websocket.value.addEventListener("message", (event) => {
       if (typeof event.data === "string") {
-        const data = JSON.parse(event.data);
-        if (data.type === "debug_frame") {
-          previous_frame_header = data;
-        } else {
-          console.log(data);
-        }
+        console.log(`Got websocket message: ${event.data}`);
       } else {
-        const header = previous_frame_header;
-        previous_frame_header = null;
         event.data.arrayBuffer()
-          .then((byte_data) => {
-            const image = new Uint16Array(byte_data);
-            frames.value.push({ header, image });
-            if (!is_pin_frame.value) {
-              selected_frame_index.value = frames.value.length-1;
+          .then((array_buffer) => {
+            const buffer = new Uint8Array(array_buffer);
+            const response = parse_websocket_response(buffer);
+            if (response.type === "debug_frame") {
+              frames.value.push(response.frame);
+              if (!is_pin_frame.value) {
+                selected_frame_index.value = frames.value.length-1;
+              }
+            } else {
+              console.log(response);
             }
           });
       }
@@ -74,27 +72,25 @@ function launch_process() {
 }
 
 function end_process() {
-    if (websocket.value === null) return;
-    if (websocket_state.value !== WebSocket.OPEN) return;
-    websocket.value.close();
+  if (websocket.value === null) return;
+  if (websocket_state.value !== WebSocket.OPEN) return;
+  websocket.value.close();
 }
 
 function on_command(command) {
-    if (websocket.value === null) return;
-    if (websocket_state.value !== WebSocket.OPEN) return;
-    websocket.value.send(JSON.stringify(command));
+  if (websocket.value === null) return;
+  if (websocket_state.value !== WebSocket.OPEN) return;
+  websocket.value.send(command);
 }
 
 onMounted(() => {
   launch_process();
 });
 
-watch(selected_frame, (selected_frame) => {
-  if (selected_frame === undefined) return;
+watch(selected_frame, (frame) => {
+  if (frame === undefined) return;
   if (frame_elem.value === null) return;
-  const { header, image } = selected_frame;
-  if (header === null) return;
-  frame_elem.value.update_image(image, header.width, header.height);
+  frame_elem.value.update_image(frame.pixel_data, frame.width, frame.height);
 }, );
 
 </script>
@@ -112,10 +108,7 @@ watch(selected_frame, (selected_frame) => {
   <input type="range" v-model.number="selected_frame_index" min="0" :max="frames.length-1" :disabled="frames.length === 0" step="1"/>
 </form>
 <div v-if="selected_frame === undefined">Waiting for frame</div>
-<div v-else>
-  <FrameHeaderTable v-if="selected_frame.header !== null" :header="selected_frame.header"/>
-  <div v-else>Missing header data</div>
-</div>
+<FrameHeaderTable v-else :frame="selected_frame"/>
 <div>
     <label>Scale: {{ frame_scale.toFixed(1) }}</label>
     <input type="range" v-model.number="frame_scale" min="0" max="4" step="0.1"/>
