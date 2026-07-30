@@ -1,4 +1,3 @@
-import cobs
 from enum import IntEnum
 import functools
 import inspect
@@ -45,87 +44,87 @@ class AppPage(IntEnum):
 
 class CommandCreator:
     def trigger_render(self):
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.TRIGGER_RENDER),
-        ]))
+        ])
 
     def set_page(self, page):
         assert isinstance(page, AppPage)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_PAGE),
             int(page),
-        ]))
+        ])
 
     def set_screen_brightness(self, brightness):
         assert isinstance(brightness, int)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_SCREEN_BRIGHTNESS),
             brightness & 0xFF,
-        ]))
+        ])
 
     def set_temperature(self, temperature):
         assert isinstance(temperature, int)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_TEMPERATURE),
             (temperature >> 8) & 0xFF,
             temperature & 0xFF,
-        ]))
+        ])
 
     def set_humidity(self, humidity):
         assert isinstance(humidity, int)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_HUMIDITY),
             (humidity >> 8) & 0xFF,
             humidity & 0xFF,
-        ]))
+        ])
 
     def set_24_hour_time(self, time_24_hour, is_show_24_hour, is_show_leading_zero):
         assert isinstance(time_24_hour, int)
         assert isinstance(is_show_24_hour, bool)
         assert isinstance(is_show_leading_zero, bool)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_TIME_24_HOUR),
             (time_24_hour >> 8) & 0xFF,
             time_24_hour & 0xFF,
             0xFF if is_show_24_hour else 0x00,
             0xFF if is_show_leading_zero else 0x00,
-        ]))
+        ])
 
     def set_wind_kph(self, wind_kph):
         assert isinstance(wind_kph, int)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_WIND_KPH),
             (wind_kph >> 8) & 0xFF,
             wind_kph & 0xFF,
-        ]))
+        ])
 
     def set_weather_icon(self, weather_icon: WeatherIcon):
         assert isinstance(weather_icon, WeatherIcon)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_WEATHER_ICON),
             int(weather_icon),
-        ]))
+        ])
 
     def set_location(self, location):
         assert isinstance(location, str)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_LOCATION),
             *location.encode(),
-        ]))
+        ])
 
     def set_weather_description(self, weather_description):
         assert isinstance(weather_description, str)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_WEATHER_DESCRIPTION),
             *weather_description.encode(),
-        ]))
+        ])
 
     def set_moon_phase(self, moon_phase: MoonPhase):
         assert isinstance(moon_phase, MoonPhase)
-        return cobs.encode(bytearray([
+        return bytearray([
             int(CommandHeader.SET_MOON_PHASE),
             int(moon_phase),
-        ]))
+        ])
 
 def create_command_sender(cls):
     namespace = {}
@@ -134,10 +133,12 @@ def create_command_sender(cls):
     namespace["__init__"] = __init__
     for name, method in inspect.getmembers(cls, inspect.isfunction):
         @functools.wraps(method)
-        def wrapper(self, *args, __method=method, **kwargs):
+        async def wrapper(self, *args, __method=method, **kwargs):
             result = __method(self, *args, **kwargs)
             if self.writer == None:
                 return None
+            if inspect.iscoroutinefunction(self.writer):
+                return await self.writer(result)
             return self.writer(result)
         namespace[name] = wrapper
     return type("CommandSender", (cls,), namespace)

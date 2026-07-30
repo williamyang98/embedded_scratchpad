@@ -4,61 +4,67 @@ import serial
 import serial.tools.list_ports
 import sys
 import os
-import time
 import json
 import requests
 import ephem
 import math
 import functools
-import threading
+import asyncio
 from datetime import datetime
 from devices import Device, ProcessDevice, SerialDevice
-from response_parser import ResponseHandler
-from command_creator import WeatherIcon, MoonPhase
+from response_parser import ResponseHandler, ResponseParser
+from command_creator import CommandSender, WeatherIcon, MoonPhase
 from wmo_weather_codes import WMO_WEATHER_CODES
+from typing_extensions import override
 
 logger = logging.getLogger(__name__)
 
 class RenderFence:
     def __init__(self, initial_is_busy=False):
-        self.cv = threading.Condition()
+        self.cv = asyncio.Condition()
         self.is_busy = initial_is_busy
 
-    def wait_not_busy(self):
-        self.cv.acquire()
+    async def wait_not_busy(self):
+        await self.cv.acquire()
         while self.is_busy:
-            logger.info("Waiting for render to finish")
-            self.cv.wait()
+            logger.info("Waiting for render to finish...")
+            await self.cv.wait()
+            logger.info("Finished waiting for render to finish")
         self.cv.release()
 
-    def set_is_busy(self, is_busy):
-        self.cv.acquire()
+    async def set_is_busy(self, is_busy):
+        await self.cv.acquire()
         is_changed = self.is_busy != is_busy
         self.is_busy = is_busy
         if is_changed:
             self.cv.notify_all()
         self.cv.release()
 
-    def close(self):
-        self.set_is_busy(False)
+    async def close(self):
+        await self.set_is_busy(False)
 
 class CustomResponseHandler(ResponseHandler):
     def __init__(self, render_fence):
         self.render_fence = render_fence
 
-    def acknowledge_command(self, header, is_success):
+    @override
+    async def acknowledge_command(self, header, is_success):
         pass
 
-    def render_status(self, is_busy):
-        self.render_fence.set_is_busy(is_busy)
+    @override
+    async def render_status(self, is_busy):
+        await self.render_fence.set_is_busy(is_busy)
 
-    def log_message(self, message):
+    @override
+    async def log_message(self, message):
+        logger.info(f"Got message: {message}")
+
+    @override
+    async def debug_message(self, message):
         pass
 
-    def debug_message(self, message):
-        pass
-
-    def debug_frame(self, frame):
+    @override
+    async def debug_frame(self, frame):
         pass
 
 def get_openmeteo_url(latitude, longitude):
@@ -71,9 +77,9 @@ def get_openmeteo_url(latitude, longitude):
 
 def graceful_fail(func):
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs):
         try:
-            func(*args, **kwargs)
+            await func(*args, **kwargs)
         except Exception as ex:
             logger.error(f"{func.__name__} failed with: {ex}")
     return wrapper
@@ -82,7 +88,7 @@ def trigger_every(n, is_immediate=True):
     def decorator(func):
         counter = 0
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        async def wrapper(*args, **kwargs):
             nonlocal counter
             nonlocal is_immediate
             is_trigger = counter == n or is_immediate
@@ -93,7 +99,7 @@ def trigger_every(n, is_immediate=True):
                 else:
                     logger.info(f"Triggering {func.__name__} after {n} calls")
                     counter = 0
-                func(*args, **kwargs)
+                await func(*args, **kwargs)
             counter += 1
         return wrapper
     return decorator
@@ -101,52 +107,68 @@ def trigger_every(n, is_immediate=True):
 
 def wait_render_fence(func):
     @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-        self.render_fence.wait_not_busy()
-        return func(self, *args, **kwargs)
+    async def wrapper(self, *args, **kwargs):
+        await self.render_fence.wait_not_busy()
+        return await func(self, *args, **kwargs)
     return wrapper
 
 class Server:
     def __init__(self, device, render_fence, openmeteo_url, location, screen_brightness):
         self.device = device
         self.render_fence = render_fence
+        self.response_handler = CustomResponseHandler(self.render_fence)
+        self.response_parser = ResponseParser(self.response_handler)
+        self.command_sender = CommandSender(writer=self.device.write)
+
         self.openmeteo_url = openmeteo_url
-        self.command_sender = self.device.get_command_sender()
         self.location = location
         self.screen_brightness = screen_brightness
 
-    def run(self):
-        self.on_connection()
-        while True:
-            self.update_time()
-            self.update_weather()
-            self.update_moon()
-            self.trigger_render()
-            self.wait_until_next_minute()
+    async def run(self):
+        async def device_read_loop():
+            while True:
+                try:
+                    buffer = await self.device.read()
+                    await self.response_parser.read(buffer)
+                except Exception as ex:
+                    logger.info(f"Closing async device read loop: {ex}")
+                    break
 
-    def wait_until_next_minute(self):
+        async def server_loop():
+            await self.on_connection()
+            while True:
+                await self.update_time()
+                await self.update_weather()
+                await self.update_moon()
+                await self.trigger_render()
+                await self.wait_until_next_minute()
+
+        device_read_task = asyncio.create_task(device_read_loop())
+        await server_loop()
+
+    async def wait_until_next_minute(self):
         now = datetime.now()
         margin = 2
         delay = 60-now.second+margin
-        time.sleep(delay)
+        await asyncio.sleep(delay)
 
     @graceful_fail
     @wait_render_fence
-    def on_connection(self):
-        self.command_sender.set_location(self.location.upper())
-        self.command_sender.set_screen_brightness(self.screen_brightness)
+    async def on_connection(self):
+        await self.command_sender.set_location(self.location.upper())
+        await self.command_sender.set_screen_brightness(self.screen_brightness)
 
     @graceful_fail
     @wait_render_fence
-    def update_time(self):
+    async def update_time(self):
         now = datetime.now()
         time_24_hour = now.hour*100 + now.minute
-        self.command_sender.set_24_hour_time(time_24_hour, False, True)
+        await self.command_sender.set_24_hour_time(time_24_hour, False, True)
 
     @trigger_every(60)
     @graceful_fail
     @wait_render_fence
-    def update_weather(self):
+    async def update_weather(self):
         response = requests.get(self.openmeteo_url)
         if response.status_code != 200:
             logger.error(f"Got a bad response from openmeteo with code={response.status_code}")
@@ -165,27 +187,27 @@ class Server:
 
         if temperature != None:
             temperature = int(round(temperature*10))
-            self.command_sender.set_temperature(temperature)
+            await self.command_sender.set_temperature(temperature)
         if humidity != None:
             humidity = int(round(humidity*10))
             humidity = max(humidity, 0)
-            self.command_sender.set_humidity(humidity)
+            await self.command_sender.set_humidity(humidity)
         if wind_speed != None:
             wind_speed = int(round(wind_speed*10))
             wind_speed = max(wind_speed, 0)
-            self.command_sender.set_wind_kph(wind_speed)
+            await self.command_sender.set_wind_kph(wind_speed)
         if wmo_weather_code != None:
             weather_code = WMO_WEATHER_CODES.get(wmo_weather_code, None)
             if weather_code != None:
-                self.command_sender.set_weather_description(weather_code.description.upper())
-                self.command_sender.set_weather_icon(weather_code.weather_icon)
+                await self.command_sender.set_weather_description(weather_code.description.upper())
+                await self.command_sender.set_weather_icon(weather_code.weather_icon)
             else:
                 logger.warning(f"Failed to fetch wmo weather code: {wmo_weather_code}")
 
     @trigger_every(60)
     @graceful_fail
     @wait_render_fence
-    def update_moon(self):
+    async def update_moon(self):
         date = ephem.Date(datetime.now())
         next_new_moon = ephem.next_new_moon(date)
         previous_new_moon = ephem.previous_new_moon(date)
@@ -193,14 +215,14 @@ class Server:
         TOTAL_MOON_PHASES = 8
         phase_index = int(math.floor(lunation*TOTAL_MOON_PHASES)) % TOTAL_MOON_PHASES 
         phase = MoonPhase(phase_index)
-        self.command_sender.set_moon_phase(phase)
+        await self.command_sender.set_moon_phase(phase)
 
     @graceful_fail
     @wait_render_fence
-    def trigger_render(self):
-        self.command_sender.trigger_render()
+    async def trigger_render(self):
+        await self.command_sender.trigger_render()
 
-def main():
+async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--latitude", default=-33.857504, type=float, help="Location latitude")
     parser.add_argument("--longitude", default=151.215263, type=float, help="Location longitude")
@@ -248,24 +270,23 @@ def main():
         return 1
 
     try:
-        initial_is_busy = not args.no_reset
-        render_fence = RenderFence(initial_is_busy)
-        response_handler = CustomResponseHandler(render_fence)
-        device = SerialDevice(ser, response_handler)
+        event_loop = asyncio.get_running_loop()
+        render_fence = RenderFence(initial_is_busy=not args.no_reset)
+        device = SerialDevice(ser, event_loop)
         openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
         server = Server(device, render_fence, openmeteo_url, args.location, args.screen_brightness)
-        server.run()
+        await server.run()
     except KeyboardInterrupt:
         logger.info("Exiting on keyboard interrupt...")
     except Exception as ex:
         logger.error(f"Server failed with exception: {ex}")
         return 1
     finally:
-        render_fence.close()
-        device.wait()
+        await render_fence.close()
+        await device.close()
 
     return 0
 
 if __name__ == "__main__":
-    rv = main()
+    rv = asyncio.run(main())
     sys.exit(rv)

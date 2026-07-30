@@ -1,4 +1,3 @@
-import cobs
 from frame import Frame
 from abc import ABC, abstractmethod
 import struct
@@ -31,33 +30,30 @@ class UnhandledResponse(Exception):
 
 class ResponseHandler(ABC):
     @abstractmethod
-    def acknowledge_command(self, header: int, is_success: bool):
+    async def acknowledge_command(self, header: int, is_success: bool):
         pass
 
     @abstractmethod
-    def render_status(self, is_busy: bool):
+    async def render_status(self, is_busy: bool):
         pass
 
     @abstractmethod
-    def log_message(self, message: str):
+    async def log_message(self, message: str):
         pass
 
     @abstractmethod
-    def debug_message(self, message: str):
+    async def debug_message(self, message: str):
         pass
 
     @abstractmethod
-    def debug_frame(self, frame: Frame):
+    async def debug_frame(self, frame: Frame):
         pass
 
 class ResponseParser:
     def __init__(self, handler: ResponseHandler):
         self.handler = handler
 
-    def read_encoded_bytes(self, encoded_data: bytes):
-        if len(encoded_data) == 0:
-            return
-        data = cobs.decode(encoded_data)
+    async def read(self, data: bytearray):
         if len(data) == 0:
             raise EmptyDecodedResponse
 
@@ -72,23 +68,23 @@ class ResponseParser:
             assert_length(3)
             ack_header = data[1]
             is_success = data[2] != 0
-            self.handler.acknowledge_command(ack_header, is_success)
+            await self.handler.acknowledge_command(ack_header, is_success)
         elif header == ResponseHeader.RENDER_STATUS:
             assert_length(2)
             is_busy = data[1] != 0
-            self.handler.render_status(is_busy)
+            await self.handler.render_status(is_busy)
         elif header == ResponseHeader.LOG_MESSAGE:
             message = data[1:]
             message = message.decode("utf-8")
-            self.handler.log_message(message)
+            await self.handler.log_message(message)
         elif header == ResponseHeader.DEBUG_MESSAGE:
             message = data[1:]
             message = message.decode("utf-8")
-            self.handler.debug_message(message)
+            await self.handler.debug_message(message)
         elif header == ResponseHeader.DEBUG_FRAME:
             frame_data = data[1:]
             frame = Frame(frame_data)
-            self.handler.debug_frame(frame)
+            await self.handler.debug_frame(frame)
         else:
             raise UnhandledResponse(header, data)
 
