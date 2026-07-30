@@ -17,3 +17,6 @@
 1. Check the status of VBoxUSBMon (admin): ```sc query VBoxUsbMon```
 2. Try reinstalling usbipd and restarting computer (powershell+admin): ```winget uninstall usbipd``` then ```winget install usbipd```
 
+### Fixing serial port permissions
+- To make the serial port accessible you might need to modify its permissions
+- ```sudo chmod 666 /dev/ttyUSB*```
