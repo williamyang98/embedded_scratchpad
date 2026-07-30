@@ -1,5 +1,6 @@
 #!/bin/bash
-cd ../vendor/
+VENDOR_PATH="$(realpath -s ../vendor)"
+cd $VENDOR_PATH
 
 rm -rf xtensa-lx106-elf/
 echo "Removing old toolchain"

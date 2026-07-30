@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 GLYPH_BACKGROUND_COLOUR = 0
 GLYPH_TEXT_COLOUR = 255
 
+NL = "\n" # python <3.12 doesn't support backslashes in fstrings
+
 def get_char_name(char):
     name = unicodedata.name(char)
     name = name.lower()
@@ -144,9 +146,9 @@ f"""#pragma once
 
 namespace {self.namespace} {{
 
-{'\n'.join((glyph_cpp.array_declaration for glyph_cpp in glyphs_cpp))}
+{NL.join((glyph_cpp.array_declaration for glyph_cpp in glyphs_cpp))}
 
-{'\n'.join((glyph_cpp.glyph_declaration for glyph_cpp in glyphs_cpp))}
+{NL.join((glyph_cpp.glyph_declaration for glyph_cpp in glyphs_cpp))}
 
 static constexpr uint16_t MAX_HEIGHT = {self.max_height};
 static constexpr uint16_t MAX_WIDTH = {self.max_height};
@@ -158,7 +160,7 @@ struct GlyphEntry {{
 }};
 
 static const GlyphEntry glyph_entries[TOTAL_GLYPHS] = {{
-{'\n'.join((f"    {{ 0x{glyph_cpp.ascii_value:02X}, &{glyph_cpp.glyph_name} }}," for glyph_cpp in glyphs_cpp))}
+{NL.join((f"    {{ 0x{glyph_cpp.ascii_value:02X}, &{glyph_cpp.glyph_name} }}," for glyph_cpp in glyphs_cpp))}
 }};
 
 static const glyph::Glyph* get_glyph(uint8_t c) {{

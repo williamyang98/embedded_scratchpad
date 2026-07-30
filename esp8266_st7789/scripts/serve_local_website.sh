@@ -1,3 +1,4 @@
 #!/bin/sh
-python -m http.server -d ./scripts/static
+set -x
+python -m http.server -d $STATIC_FILES_DIR
 

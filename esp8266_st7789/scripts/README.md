@@ -4,7 +4,7 @@
     - Option 2 (annoying): Download msys2 and use MSYS environment (not mingw64, mingw32, ...)
 2. Download RTOS SDK by cloning this repo recursively: ```git clone <URL> --recurse-submodules``` or afterwards with ```git submodule update --init --recursive```
 3. Install xtensa toolchain: ```./scripts/install_xtensa_toolchain.sh```.
-4. Create RTOS SDK virtual python environment: ```python -m venv venv```
+4. Create RTOS SDK virtual python environment which requires python 3.10: ```python -m venv venv```
 5. Activate python environment: ```source ./venv/bin/activate``` or ```source ./venv/Scripts/activate``` depending on OS.
 6. Install sdk python packages: ```SETUPTOOLS_USE_DISTUTILS=stdlib pip install -r ../vendor/esp8266-rtos-sdk/requirements.txt``` 
     - [fix_1](https://stackoverflow.com/a/76882830)
@@ -18,12 +18,13 @@
 2. Initialise ESP environment: ```source ./scripts/init_env.sh```
 3. Configure cmake: ```./scripts/cmake_configure.sh```
 4. Create wifi credentials file: ```printf "#pragma once\n#define WIFI_SSID \"example_ssid\"\n#define WIFI_PASS \"example_pass\"\n" > ./main/wifi_sta_config.h```
-5. Build program binary: ```cmake --build build```
+5. Generate font glyphs and icons: ```./scripts/render_all_glyphs.sh```
+5. Build program binary: ```cmake --build build/app```
 
 ### 2. Flashing program
 1. Determine serial port from ```/dev/tty??```.
 2. Set COM port variable: ```export ESPPORT=/dev/tty??```
-3. Build program: ```cmake --build build```
+3. Build program: ```cmake --build build/app```
 4. Hold flash button on ESP8266-12E board while flashing binaries
 5. Flash program: ```./scripts/flash_program.sh```
 6. Running serial monitor: ```./scripts/serial_monitor.sh```
@@ -38,7 +39,7 @@
 
 ### 4. Additional scripts
 - To avoid reflashing while modifying the webpage run the website locally: ```./scripts/serve_local_website.sh```
-- To edit ```./sdkconfig``` more conveniently via a terminal UI: ```cmake --build build --target menuconfig```
+- To edit ```./sdkconfig``` more conveniently via a terminal UI: ```cmake --build build/app --target menuconfig```
 
 ## Sharing USB COM ports with WSL2
 ### 1. Instructions

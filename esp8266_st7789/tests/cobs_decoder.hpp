@@ -1,3 +1,8 @@
+#pragma once
+#include <stdint.h>
+#include "./app/commands.hpp"
+#include "./utility/cobs.hpp"
+
 class CobsDecoder {
 private:
     CommandParser& m_parser;

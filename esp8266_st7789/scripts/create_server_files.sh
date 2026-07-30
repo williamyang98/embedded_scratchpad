@@ -1,6 +1,4 @@
 #!/bin/sh
-INPUT_DIR="./static"
-OUTPUT_FILE="./spiffs_filesystem_partition.bin"
 
 # NOTE: For the correct arguments refer to CONFIG_SPIFFS_* variables in ./sdkconfig
 # CONFIG_SPIFFS_USE_MAGIC=y
@@ -10,14 +8,17 @@ CONFIG_SPIFFS_OBJ_NAME_LEN=32
 CONFIG_SPIFFS_META_LENGTH=4
 # TODO: Determine what the block size argument corresponds to?
 CONFIG_SPIFFS_BLOCK_SIZE=4096
+
 # NOTE: This must be identical to the size specified in ./partitions.csv
 # 1M = 1024K = 1048576
 CONFIG_SPIFFS_PARTITION_SIZE=1048576
 
 set -x
 
-rm -f $OUTPUT_FILE
-python ./scripts/src/create_server_index.py
+rm -f $STATIC_FILES_DIR/server_files.csv
+python ./scripts/src/create_server_index.py\
+ --static $STATIC_FILES_DIR\
+ --output $STATIC_FILES_DIR/server_files.csv
 
 python ./scripts/src/spiffsgen.py\
  --use-magic --use-magic-len\
@@ -26,4 +27,4 @@ python ./scripts/src/spiffsgen.py\
  --obj-name-len $CONFIG_SPIFFS_OBJ_NAME_LEN\
  --meta-len $CONFIG_SPIFFS_META_LENGTH\
  --aligned-obj-ix-tables\
- $CONFIG_SPIFFS_PARTITION_SIZE $INPUT_DIR $OUTPUT_FILE
+ $CONFIG_SPIFFS_PARTITION_SIZE $STATIC_FILES_DIR $SPIFFS_PARTITION_PATH

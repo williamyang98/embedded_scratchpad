@@ -1,5 +1,5 @@
-#include "../src/hardware/tft.hpp"
-#include "../src/hardware/st7789.hpp"
+#include "./hardware/tft.hpp"
+#include "./st7789.hpp"
 
 namespace tft {
 

@@ -6,7 +6,7 @@
 #include <format>
 #include <vector>
 #include <span>
-#include "../hardware/st7789.hpp"
+#include "./st7789.hpp"
 #include "../graphics/rgb565.hpp"
 #endif
 
