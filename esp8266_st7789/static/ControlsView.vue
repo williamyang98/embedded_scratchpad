@@ -29,7 +29,7 @@ function trigger_render() {
 // bound to slider which emits too many events at once
 const _set_screen_brightness = debounce_timeout((brightness) => {
   emit_command(command_creator.set_screen_brightness(brightness));
-}, 100);
+}, 10);
 function set_screen_brightness() {
   _set_screen_brightness(screen_brightness.value);
 }
@@ -102,67 +102,77 @@ defineExpose({
 </script>
 
 <template>
-<form>
-  <button @click.stop="trigger_render" type="button">Trigger Render</button>
-  <button @click.stop="refresh_all" type="button">Refresh All</button>
-  <div>
-    <label>Screen brightness: </label>
-    <input type="range" v-model.number="screen_brightness" min="0", max="255">
-  </div>
-  <div>
-    <label>Temperature: </label>
-    <input type="number" v-model.number="temperature_celcius" min="-999", max="900">
-  </div>
-  <div>
-    <label>Humidity: </label>
-    <input type="number" v-model.number="humidity_percent" min="0", max="1000">
-  </div>
-  <div>
-    <label>Wind: </label>
-    <input type="number" v-model.number="wind_kph" min="0", max="1000">
-  </div>
-  <div>
-    <label>Time: </label>
-    <input type="number" v-model.number="time_24_hour" min="0", max="2400">
-  </div>
-  <div>
-    <label>Time leading zeros: </label>
-    <input type="checkbox" v-model.boolean="time_show_leading_zeros"/>
-  </div>
-  <div>
-    <label>Time 24 hour: </label>
-    <input type="checkbox" v-model.boolean="time_show_24_hour"/>
-  </div>
-  <div>
-    <label>Location: </label>
-    <input type="text" v-model.text="location"/>
-  </div>
-  <div>
-    <label>Weather description: </label>
-    <input type="text" v-model.text="weather_description"/>
-  </div>
-  <div>
-    <label>Moon phase: </label>
-    <select v-model.number="moon_phase">
-      <option :value="MoonPhase.NEW_MOON">new moon</option>
-      <option :value="MoonPhase.WAXING_CRESCENT">waxing crescent</option>
-      <option :value="MoonPhase.FIRST_QUARTER">first quarter</option>
-      <option :value="MoonPhase.WAXING_GIBBOUS">waxing gibbous</option>
-      <option :value="MoonPhase.FULL_MOON">full moon</option>
-      <option :value="MoonPhase.WANING_GIBBOUS">Waning gibbous</option>
-      <option :value="MoonPhase.THIRD_QUARTER">third quarter</option>
-      <option :value="MoonPhase.WANING_CRESCENT">waning crescent</option>
-    </select>
-  </div>
-  <div>
-    <label>Weather icon: </label>
-    <select v-model.number="weather_icon">
-      <option :value="WeatherIcon.WINTER">winter</option>
-      <option :value="WeatherIcon.LIGHTNING_STORM">lightning storm</option>
-      <option :value="WeatherIcon.HEAVY_RAIN">heavy rain</option>
-      <option :value="WeatherIcon.PARTLY_CLOUDY">partly cloudy</option>
-      <option :value="WeatherIcon.SUNNY">sunny</option>
-    </select>
-  </div>
-</form>
+<table>
+<tbody>
+  <tr>
+    <td colspan=2>
+      <button @click.stop="trigger_render" type="button">Trigger Render</button>
+      <button @click.stop="refresh_all" type="button">Refresh All</button>
+    </td>
+  </tr>
+  <tr>
+    <td><label>Screen brightness</label></td>
+    <td><input type="range" v-model.number="screen_brightness" min="0", max="255"></td>
+  </tr>
+  <tr>
+    <td><label>Temperature</label></td>
+    <td><input type="number" v-model.number="temperature_celcius" min="-999", max="900">
+  </tr>
+  <tr>
+    <td><label>Humidity</label></td>
+    <td><input type="number" v-model.number="humidity_percent" min="0", max="1000"></td>
+  </tr>
+  <tr>
+    <td><label>Wind</label></td>
+    <td><input type="number" v-model.number="wind_kph" min="0", max="1000"></td>
+  </tr>
+  <tr>
+    <td><label>Time</label></td>
+      <td><input type="number" v-model.number="time_24_hour" min="0", max="2400"></td>
+  </tr>
+  <tr>
+    <td><label>Time leading zeros</label></td>
+      <td><input type="checkbox" v-model.boolean="time_show_leading_zeros"/></td>
+  </tr>
+  <tr>
+    <td><label>Time 24 hour</label></td>
+    <td><input type="checkbox" v-model.boolean="time_show_24_hour"/></td>
+  </tr>
+  <tr>
+    <td><label>Location</label></td>
+    <td><input type="text" v-model.text="location"/></td>
+  </tr>
+  <tr>
+    <td><label>Weather description</label></td>
+    <td><input type="text" v-model.text="weather_description"/></td>
+  </tr>
+  <tr>
+    <td><label>Moon phase</label></td>
+    <td>
+      <select v-model.number="moon_phase">
+        <option :value="MoonPhase.NEW_MOON">new moon</option>
+        <option :value="MoonPhase.WAXING_CRESCENT">waxing crescent</option>
+        <option :value="MoonPhase.FIRST_QUARTER">first quarter</option>
+        <option :value="MoonPhase.WAXING_GIBBOUS">waxing gibbous</option>
+        <option :value="MoonPhase.FULL_MOON">full moon</option>
+        <option :value="MoonPhase.WANING_GIBBOUS">Waning gibbous</option>
+        <option :value="MoonPhase.THIRD_QUARTER">third quarter</option>
+        <option :value="MoonPhase.WANING_CRESCENT">waning crescent</option>
+      </select>
+    </td>
+  </tr>
+  <tr>
+    <td><label>Weather icon</label></td>
+    <td>
+      <select v-model.number="weather_icon">
+        <option :value="WeatherIcon.WINTER">winter</option>
+        <option :value="WeatherIcon.LIGHTNING_STORM">lightning storm</option>
+        <option :value="WeatherIcon.HEAVY_RAIN">heavy rain</option>
+        <option :value="WeatherIcon.PARTLY_CLOUDY">partly cloudy</option>
+        <option :value="WeatherIcon.SUNNY">sunny</option>
+      </select>
+    </td>
+  </tr>
+</tbody>
+</table>
 </template>

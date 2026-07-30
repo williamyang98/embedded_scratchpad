@@ -166,8 +166,8 @@ def main():
     web_app.on_cleanup.append(app.on_cleanup)
     # main/main.cpp in g_websocket.uri
     web_app.router.add_get("/api/v1/websocket", app.websocket_handler)
-    web_app.router.add_static("/", path=static_dirpath, follow_symlinks=True, append_version=True)
     web_app.router.add_get("/", lambda request: web.HTTPFound("/index.html"))
+    web_app.router.add_static("/", path=static_dirpath, follow_symlinks=True, append_version=True)
     web.run_app(web_app, port=8080)
     return 0
 

@@ -41,6 +41,11 @@
 - To avoid reflashing while modifying the webpage run the website locally: ```./scripts/serve_local_website.sh```
 - To edit ```./sdkconfig``` more conveniently via a terminal UI: ```cmake --build build/app --target menuconfig```
 
+## Running local st7789 test server
+1. Build test binary: ```cmake --build build/tests```
+2. Running local debug server: ```./scripts/start_debug_server.sh```
+3. Open browser to url: ```http://localhost:8080```
+
 ## Sharing USB COM ports with WSL2
 ### 1. Instructions
 1. Install usbipd and restart computer (powershell+admin): ```winget install usbipd```

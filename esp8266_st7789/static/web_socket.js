@@ -127,20 +127,11 @@ export const ResponseHeader = {
 
 export class BadLengthError extends Error {
   constructor(header, expected, given) {
-    let message = `Header ${header} expected length of ${expected} but was given ${given}`
+    const message = `Header ${header} expected length of ${expected} but was given ${given}`;
     super(message);
     this.header = header;
     this.expected = expected;
     this.given = given;
-  }
-}
-
-export class BadAcknowledgeError extends Error {
-  constructor(header, is_success) {
-    let message = `Server sent a bad acknowledge for header=${header}, is_success=${is_success}`;
-    super(message);
-    this.header = header;
-    this.is_success = is_success;
   }
 }
 
@@ -162,29 +153,26 @@ export function parse_websocket_response(data) {
   if (header === ResponseHeader.ACKNOWLEDGE_COMMAND) {
     const EXPECTED_LENGTH = 3;
     if (data.length !== EXPECTED_LENGTH) throw new BadLengthError(header, EXPECTED_LENGTH, data.length);
-    let header = data[1];
-    let is_success = data[2] != 0x00;
-    if (!is_success) {
-      throw BadAcknowledgeError(header, is_success);
-    }
-    return { type: "acknowledge_command", header, is_success }
+    const ack_header = data[1];
+    const is_success = data[2] != 0x00;
+    return { type: "acknowledge_command", header: ack_header, is_success }
   }
   if (header === ResponseHeader.RENDER_STATUS) {
     const EXPECTED_LENGTH = 2;
     if (data.length !== EXPECTED_LENGTH) throw new BadLengthError(header, EXPECTED_LENGTH, data.length);
-    let is_busy = data[1] != 0x00;
+    const is_busy = data[1] != 0x00;
     return { type: "render_status", is_busy };
   }
   if (header === ResponseHeader.LOG_MESSAGE) {
-    let view = data.subarray(1);
-    let decoder = new TextDecoder("utf-8");
-    let message = decoder.decode(view);
+    const view = data.subarray(1);
+    const decoder = new TextDecoder("utf-8");
+    const message = decoder.decode(view);
     return { type: "log_message", message };
   }
   if (header === ResponseHeader.DEBUG_MESSAGE) {
-    let view = data.subarray(1);
-    let decoder = new TextDecoder("utf-8");
-    let message = decoder.decode(view);
+    const view = data.subarray(1);
+    const decoder = new TextDecoder("utf-8");
+    const message = decoder.decode(view);
     return { type: "debug_message", message };
   }
   if (header === ResponseHeader.DEBUG_FRAME) {
