@@ -154,11 +154,9 @@ class Server:
         async def server_loop():
             await self.on_connection()
             while True:
-                await asyncio.gather(
-                    self.update_time(),
-                    self.update_weather(),
-                    self.update_moon(),
-                )
+                await self.update_time()
+                await self.update_weather()
+                await self.update_moon()
                 await self.trigger_render()
                 await self.wait_until_next_minute()
 
