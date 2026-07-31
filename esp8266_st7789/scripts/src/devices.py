@@ -243,7 +243,7 @@ class WebsocketDevice(Device):
                 self.logger.info("Got pong")
             elif message.type == WSMsgType.CLOSE:
                 self.logger.info("Got close message")
-            elif message.type == WSMsgType.CLOSE_FRAME:
+            elif message.type == WSMsgType.CLOSED:
                 raise Exception(f"Websocket is closed at url={self.url}")
             else:
                 self.logger.warning(f"Got unhandled websocket with type: {message.type}")
