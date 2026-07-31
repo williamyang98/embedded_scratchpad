@@ -154,9 +154,11 @@ class Server:
         async def server_loop():
             await self.on_connection()
             while True:
-                await self.update_time()
-                await self.update_weather()
-                await self.update_moon()
+                await asyncio.gather(
+                    self.update_time(),
+                    self.update_weather(),
+                    self.update_moon(),
+                )
                 await self.trigger_render()
                 await self.wait_until_next_minute()
 
@@ -191,7 +193,7 @@ class Server:
     @graceful_fail
     @wait_render_fence
     async def update_weather(self):
-        response = requests.get(self.openmeteo_url)
+        response = await asyncio.to_thread(requests.get, self.openmeteo_url)
         if response.status_code != 200:
             logger.error(f"Got a bad response from openmeteo with code={response.status_code}")
             return
