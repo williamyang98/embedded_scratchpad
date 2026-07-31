@@ -14,7 +14,6 @@ CHROMA_KEY_PALETTE_VALUE = 254
 TOTAL_PALETTE_VALUES = 256-2
 CHROMA_KEY = np.array([255,0,255], np.uint8)
 ENCODING_CPP_ENUM = "glyph::Encoding::RGBA_Q256_PALETTE"
-NL = "\n" # python <3.12 doesn't support backslashes in fstrings
 
 class Icon:
     def __init__(self, image, name):
@@ -116,16 +115,16 @@ f"""namespace {self.namespace} {{
 static constexpr uint16_t MAX_HEIGHT = {self.max_height};
 static constexpr uint16_t MAX_WIDTH = {self.max_height};
 static constexpr uint8_t TOTAL_ICONS = {len(self.icons)};
-{NL.join((icon_cpp.array_declaration for icon_cpp in icons_cpp))}
+{"\n".join((icon_cpp.array_declaration for icon_cpp in icons_cpp))}
 
-{NL.join((icon_cpp.glyph_declaration for icon_cpp in icons_cpp))}
+{"\n".join((icon_cpp.glyph_declaration for icon_cpp in icons_cpp))}
 
 enum class Icon: uint8_t {{
-{NL.join((f"    {icon_cpp.enum_name}={index}," for index, icon_cpp in enumerate(icons_cpp)))}
+{"\n".join((f"    {icon_cpp.enum_name}={index}," for index, icon_cpp in enumerate(icons_cpp)))}
 }};
 
 static const glyph::Glyph* const icons[TOTAL_ICONS] = {{
-{NL.join((f"    &{icon_cpp.glyph_name}," for icon_cpp in icons_cpp))}
+{"\n".join((f"    &{icon_cpp.glyph_name}," for icon_cpp in icons_cpp))}
 }};
 
 static const glyph::Glyph* get_icon(Icon icon) {{
@@ -229,7 +228,7 @@ namespace {args.namespace} {{
 
 {palette.get_cpp_string()}
 
-{(NL+NL).join((indent_code_block(icon_folder.get_cpp_string()) for icon_folder in icon_folders))}
+{"\n\n".join((indent_code_block(icon_folder.get_cpp_string()) for icon_folder in icon_folders))}
 
 }};
 """
