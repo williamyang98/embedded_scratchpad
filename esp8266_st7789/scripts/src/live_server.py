@@ -109,9 +109,9 @@ def trigger_every(n, is_immediate=True):
                 setattr(self, trigger_every_name, counter)
             else:
                 counter = getattr(self, trigger_every_name)
-            is_trigger, is_immediate = counter.increment()
+            is_trigger, was_immediate = counter.increment()
             if is_trigger:
-                if is_immediate:
+                if was_immediate:
                     logger.info(f"Triggering {func.__name__} immediately")
                 else:
                     logger.info(f"Triggering {func.__name__} after {counter.threshold} calls")
