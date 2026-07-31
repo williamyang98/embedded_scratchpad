@@ -5,6 +5,7 @@ export const DEFAULT_WEBSOCKET_URL = `ws://${document.location.host}/api/v1/webs
 
 // javascript port of scripts/src/command_creator.py
 // transmitter for components/st7789/app/commands.hpp
+// websocket_on_binary_frame @ main/websocket_handler.cpp
 export const CommandHeader = {
   TRIGGER_RENDER: 0x00,
   // weather page
@@ -19,6 +20,8 @@ export const CommandHeader = {
   // set page
   SET_SCREEN_BRIGHTNESS: 0xFE,
   SET_PAGE: 0xFF,
+  // non-st7789 commands
+  GET_DHT11: 0x0A,
 };
 
 export const WeatherIcon = {
@@ -113,21 +116,37 @@ export class CommandCreator {
       moon_phase,
     ]);
   }
+  get_dht11() {
+    return new Uint8Array([CommandHeader.GET_DHT11]);
+  }
 }
 
 // javascript port of scripts/src/response_parser.py
 // receiver for components/st7789/app/response.hpp
+// websocket_on_binary_frame @ main/websocket_handler.cpp
 export const ResponseHeader = {
   ACKNOWLEDGE_COMMAND: 0x00,
   RENDER_STATUS: 0x01,
   LOG_MESSAGE: 0x02,
   DEBUG_MESSAGE: 0x03,
   DEBUG_FRAME: 0x04,
+  // non-st7789 responses
+  GET_DHT11: 0x0A,
 };
 
-export class BadLengthError extends Error {
+export class MinimumLengthError extends Error {
+  constructor(header, minimum, given) {
+    const message = `Header ${header} expected minimum length of ${minimum} but was given ${given}`;
+    super(message);
+    this.header = header;
+    this.minimum = minimum;
+    this.given = given;
+  }
+}
+
+export class ExactLengthError extends Error {
   constructor(header, expected, given) {
-    const message = `Header ${header} expected length of ${expected} but was given ${given}`;
+    const message = `Header ${header} expected exact length of ${expected} but was given ${given}`;
     super(message);
     this.header = header;
     this.expected = expected;
@@ -152,14 +171,18 @@ export function parse_websocket_response(data) {
   const header = data[0];
   if (header === ResponseHeader.ACKNOWLEDGE_COMMAND) {
     const EXPECTED_LENGTH = 3;
-    if (data.length !== EXPECTED_LENGTH) throw new BadLengthError(header, EXPECTED_LENGTH, data.length);
+    if (data.length !== EXPECTED_LENGTH) {
+      throw new ExactLengthError(header, EXPECTED_LENGTH, data.length);
+    }
     const ack_header = data[1];
     const is_success = data[2] != 0x00;
     return { type: "acknowledge_command", header: ack_header, is_success }
   }
   if (header === ResponseHeader.RENDER_STATUS) {
     const EXPECTED_LENGTH = 2;
-    if (data.length !== EXPECTED_LENGTH) throw new BadLengthError(header, EXPECTED_LENGTH, data.length);
+    if (data.length !== EXPECTED_LENGTH) {
+      throw new ExactLengthError(header, EXPECTED_LENGTH, data.length);
+    }
     const is_busy = data[1] != 0x00;
     return { type: "render_status", is_busy };
   }
@@ -179,6 +202,22 @@ export function parse_websocket_response(data) {
     const frame_data = data.subarray(1);
     const frame = new DebugFrame(frame_data);
     return { type: "debug_frame", frame };
+  }
+  if (header === ResponseHeader.GET_DHT11) {
+    const MINIMUM_LENGTH = 2;
+    if (data.length < MINIMUM_LENGTH) {
+      throw new MinimumLengthError(header, MINIMUM_LENGTH, data.length);
+    }
+    if (data.length === 2) {
+      const error_code = data[1];
+      return { type: "dht11", is_success: false, error_code };
+    } else if (data.length === 3) {
+      const humidity = data[1];
+      const temperature = data[2];
+      return { type: "dht11", is_success: true, humidity, temperature };
+    } else {
+      throw new Error(`Unhandled dht11 response with header=${header}, length=${data.length}`);
+    }
   }
   throw new UnhandledResponse(header, data);
 }

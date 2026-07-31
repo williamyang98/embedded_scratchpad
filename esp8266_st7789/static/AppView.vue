@@ -3,7 +3,7 @@ import { ref, reactive, useTemplateRef, computed, watch, onMounted } from "vue";
 import FrameView from "./FrameView.vue";
 import ControlsView from "./ControlsView.vue";
 import FrameHeaderTable from "./FrameHeaderTable.vue"
-import { parse_websocket_response, DEFAULT_WEBSOCKET_URL } from "./web_socket.js";
+import { parse_websocket_response, CommandCreator, DEFAULT_WEBSOCKET_URL } from "./web_socket.js";
 
 const frame_elem = useTemplateRef("frame");
 const controls_elem = useTemplateRef("controls");
@@ -20,11 +20,17 @@ const can_send_commands = computed(() => {
   return websocket_state.value === WebSocket.OPEN;
 });
 const websocket_url = ref(DEFAULT_WEBSOCKET_URL);
+const command_creator = new CommandCreator();
 
 const is_pin_frame = ref(false);
 const frame_scale = ref(1.0);
 const is_render_busy = ref(false);
 const acknowledged_commands = ref({});
+const dht11 = ref({
+  temperature: null,
+  humidity: null,
+  error_code: null,
+});
 
 function count_acknowledged_command(header, is_success) {
   let counter = acknowledged_commands.value[header];
@@ -56,6 +62,14 @@ function handle_response(response) {
     is_render_busy.value = response.is_busy;
   } else if (response.type === "acknowledge_command") {
     count_acknowledged_command(response.header, response.is_success);
+  } else if (response.type === "dht11") {
+    if (response.is_success) {
+      dht11.value.temperature = response.temperature;
+      dht11.value.humidity = response.humidity;
+      dht11.value.error_code = null;
+    } else {
+      dht11.value.error_code = response.error_code;
+    }
   } else {
     console.log(response);
   }
@@ -74,8 +88,6 @@ function launch_process() {
     websocket_state.value = WebSocket.CONNECTING;
     websocket.value.addEventListener("open", () => {
       websocket_state.value = WebSocket.OPEN;
-      if (controls_elem.value === null) return;
-      controls_elem.value.submit();
     });
     websocket.value.addEventListener("message", (event) => {
       if (typeof event.data === "string") {
@@ -121,7 +133,18 @@ watch(selected_frame, (frame) => {
   if (frame === undefined) return;
   if (frame_elem.value === null) return;
   frame_elem.value.update_image(frame.pixel_data, frame.width, frame.height);
-}, );
+});
+
+function refresh_dht11() {
+  on_command(command_creator.get_dht11());
+}
+
+watch(websocket_state, (websocket_state) => {
+  if (websocket_state !== WebSocket.OPEN) return;
+  if (controls_elem.value === null) return;
+  controls_elem.value.submit();
+  refresh_dht11();
+});
 
 </script>
 
@@ -137,6 +160,23 @@ watch(selected_frame, (frame) => {
     <ControlsView ref="controls" @command="on_command"/>
     <br>
     <div>
+      <span style="margin-right: 1rem"><b>DHT11</b></span>
+      <button @click="refresh_dht11" :disabled="!can_send_commands">Refresh</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Temperature</th><th>Humidity</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="width: 33%">{{ dht11.temperature === null ? '?' : `${dht11.temperature}°C` }}</td>
+          <td style="width: 33%">{{ dht11.humidity === null ? '?' : `${dht11.humidity}%` }}</td>
+          <td>{{ dht11.error_code === null ? 'Good' : `Error(${dht11.error_code})` }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <br>
+    <div>
       <span style="margin-right: 1rem"><b>Acknowledged commands</b></span>
       <button @click="clear_acknowledged_commands">Clear</button>
     </div>
@@ -147,8 +187,8 @@ watch(selected_frame, (frame) => {
       </thead>
       <tbody>
         <tr v-for="[header, counter] of Object.entries(acknowledged_commands)" :key="header">
-          <td>{{ header }}</td>
-          <td>{{ counter.successes }}</td>
+          <td style="width: 33%">{{ header }}</td>
+          <td style="width: 33%">{{ counter.successes }}</td>
           <td>{{ counter.fails }}</td>
         </tr>
       </tbody>
