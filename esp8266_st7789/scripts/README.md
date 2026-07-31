@@ -37,14 +37,18 @@
 5. Flash spiffs partition with static webserver files: ```./scripts/flash_server_files.sh```
 6. Rerun steps 3 to 5 whenever you want to update the static webserver files in the SPIFFS partition
 
-### 4. Additional scripts
+### 4. Communicating with websocket to update st7789 display
+1. Running live server: ```python ./scripts/src/live_server.py websocket --url ws://<URL>/api/v1/websockets```
+2. For more information about options: ```python ./scripts/src/live_server.py websocket --help```
+
+## Running local development st7789 test server
+1. Build test binary: ```cmake --build build/tests```
+2. Running local debug server: ```python ./scripts/src/debug_server.py process```
+3. Open browser to url: ```http://localhost:8080```
+
+## Additional scripts
 - To avoid reflashing while modifying the webpage run the website locally: ```./scripts/serve_local_website.sh```
 - To edit ```./sdkconfig``` more conveniently via a terminal UI: ```cmake --build build/app --target menuconfig```
-
-## Running local st7789 test server
-1. Build test binary: ```cmake --build build/tests```
-2. Running local debug server: ```./scripts/start_debug_server.sh```
-3. Open browser to url: ```http://localhost:8080```
 
 ## Sharing USB COM ports with WSL2
 ### 1. Instructions

@@ -1,7 +1,5 @@
 import argparse
 import logging
-import serial
-import serial.tools.list_ports
 import sys
 import os
 import json
@@ -11,7 +9,7 @@ import math
 import functools
 import asyncio
 from datetime import datetime
-from devices import Device, ProcessDevice, SerialDevice
+from devices import add_device_argument_subparsers, get_device_factory_from_args
 from response_parser import ResponseHandler, ResponseParser
 from command_creator import CommandSender, WeatherIcon, MoonPhase
 from wmo_weather_codes import WMO_WEATHER_CODES
@@ -77,30 +75,47 @@ def get_openmeteo_url(latitude, longitude):
 
 def graceful_fail(func):
     @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(self, *args, **kwargs):
         try:
-            await func(*args, **kwargs)
+            await func(self, *args, **kwargs)
         except Exception as ex:
             logger.error(f"{func.__name__} failed with: {ex}")
     return wrapper
 
+class TriggerEveryCounter:
+    def __init__(self, threshold: int, is_immediate: bool):
+        self.is_immediate = is_immediate
+        self.threshold = threshold 
+        self.counter = 0
+
+    def increment(self):
+        is_trigger = self.counter == self.threshold or self.is_immediate
+        is_immediate = self.is_immediate
+        self.is_immediate = False
+        if is_trigger:
+            self.counter = 0
+        self.counter += 1
+        return is_trigger, is_immediate
+
 def trigger_every(n, is_immediate=True):
     def decorator(func):
-        counter = 0
+        trigger_every_name = f"__{func.__name__}__trigger_every_{n}__"
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            nonlocal counter
-            nonlocal is_immediate
-            is_trigger = counter == n or is_immediate
+        async def wrapper(self, *args, **kwargs):
+            if not hasattr(self, trigger_every_name):
+                nonlocal n
+                nonlocal is_immediate
+                counter = TriggerEveryCounter(n, is_immediate)
+                setattr(self, trigger_every_name, counter)
+            else:
+                counter = getattr(self, trigger_every_name)
+            is_trigger, is_immediate = counter.increment()
             if is_trigger:
                 if is_immediate:
                     logger.info(f"Triggering {func.__name__} immediately")
-                    is_immediate = False
                 else:
-                    logger.info(f"Triggering {func.__name__} after {n} calls")
-                    counter = 0
-                await func(*args, **kwargs)
-            counter += 1
+                    logger.info(f"Triggering {func.__name__} after {counter.threshold} calls")
+                await func(self, *args, **kwargs)
         return wrapper
     return decorator
 
@@ -108,6 +123,7 @@ def trigger_every(n, is_immediate=True):
 def wait_render_fence(func):
     @functools.wraps(func)
     async def wrapper(self, *args, **kwargs):
+        assert hasattr(self, "render_fence"), "Server instance must have a 'render_fence' attribute"
         await self.render_fence.wait_not_busy()
         return await func(self, *args, **kwargs)
     return wrapper
@@ -125,6 +141,7 @@ class Server:
         self.screen_brightness = screen_brightness
 
     async def run(self):
+        logger.info("Starting server...")
         async def device_read_loop():
             while True:
                 try:
@@ -143,8 +160,13 @@ class Server:
                 await self.trigger_render()
                 await self.wait_until_next_minute()
 
-        device_read_task = asyncio.create_task(device_read_loop())
-        await server_loop()
+        server_task = asyncio.create_task(server_loop())
+        logger.info("Server is now running")
+        await device_read_loop()
+        logger.info("Closing down server...")
+        server_task.cancel()
+        await self.device.close()
+        logger.info("Server closed down")
 
     async def wait_until_next_minute(self):
         now = datetime.now()
@@ -223,67 +245,43 @@ class Server:
         await self.command_sender.trigger_render()
 
 async def main():
+    log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
+    logging.basicConfig(level=log_level)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--latitude", default=-33.857504, type=float, help="Location latitude")
     parser.add_argument("--longitude", default=151.215263, type=float, help="Location longitude")
     parser.add_argument("--location", default="Sydney Opera House", type=str, help="Location description")
-    parser.add_argument("--port", default=None, type=str, help="COM port to connect to")
-    parser.add_argument("--baudrate", default=9600, type=int, help="Rate to communicate with device")
-    parser.add_argument("--list-ports", action="store_true", help="List all COM ports connected to computer")
-    parser.add_argument("--no-reset", action="store_true", help="Don't reset arduino on connection")
     parser.add_argument("--screen-brightness", default=50, type=int, help="Screen brightness")
+    subparsers = parser.add_subparsers(dest="mode", required=True, help="Type of device to create")
+    add_device_argument_subparsers(subparsers)
     args = parser.parse_args()
 
-    log_level = os.environ.get("PYTHON_LOG", "INFO").upper()
-    logging.basicConfig(level=log_level)
+    device_res = get_device_factory_from_args(args.mode, args)
+    if device_res["type"] == "exit_code":
+        return device_res["exit_code"]
 
-    if args.list_ports:
-        ports = serial.tools.list_ports.comports()
-        if len(ports) == 0:
-            logger.error("No ports are available to list")
-            return 1
-        for port in ports:
-            print(port.device)
-        return 0
+    assert device_res["type"] == "device_factory", f"Unknown device result return type: {device_res['type']}"
+    device_factory = device_res["device_factory"]
 
-    port_name = args.port
-    if port_name is None:
-        ports = serial.tools.list_ports.comports()
-        if len(ports) == 0:
-            logger.error("No ports available to choose by default")
-            return 1
-        port = ports[0]
-        logger.info(f"Choosing port '{port.device}' by default")
-        port_name = port.device
-
-    if not args.no_reset:
-        logger.info("Resetting on connection")
-
-    try:
-        ser = serial.Serial()
-        ser.port = port_name
-        ser.baudrate = args.baudrate
-        ser.dtr = not args.no_reset
-        ser.open()
-    except Exception as ex:
-        logger.error(f"Failed to open serial device '{port_name}': {ex}")
-        return 1
-
-    try:
-        event_loop = asyncio.get_running_loop()
-        render_fence = RenderFence(initial_is_busy=not args.no_reset)
-        device = SerialDevice(ser, event_loop)
-        openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
-        server = Server(device, render_fence, openmeteo_url, args.location, args.screen_brightness)
-        await server.run()
-    except KeyboardInterrupt:
-        logger.info("Exiting on keyboard interrupt...")
-    except Exception as ex:
-        logger.error(f"Server failed with exception: {ex}")
-        return 1
-    finally:
-        await render_fence.close()
-        await device.close()
+    while True:
+        try:
+            render_fence = RenderFence()
+            device = None
+            device = await device_factory.create_device()
+            openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
+            server = Server(device, render_fence, openmeteo_url, args.location, args.screen_brightness)
+            await server.run()
+        except KeyboardInterrupt:
+            logger.info("Exiting on keyboard interrupt...")
+            break
+        except Exception as ex:
+            logger.error(f"Server failed with exception: {ex}. Attempting to reconnect...")
+        finally:
+            await render_fence.close()
+            if device != None:
+                await device.close()
+            await asyncio.sleep(1)
 
     return 0
 
