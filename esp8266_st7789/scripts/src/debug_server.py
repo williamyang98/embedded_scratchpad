@@ -10,24 +10,6 @@ from typing_extensions import override
 
 logger = logging.getLogger(__name__)
 
-async def run_blocking(event_loop, callback):
-    future = event_loop.create_future()
-    def thread_runner():
-        try:
-            result = callback()
-            is_success = True
-        except Exception as ex:
-            result = ex
-            is_success = False
-        event_loop.call_soon_threadsafe(future.set_result, (is_success, result))
-    thread = threading.Thread(target=thread_runner)
-    thread.start()
-    is_success, result = await future
-    thread.join()
-    if is_success:
-        return result
-    raise result
-
 class App:
     def __init__(self, device_factory):
         self.device_factory = device_factory
@@ -54,6 +36,7 @@ class App:
                 except Exception as ex:
                     logger.info(f"Closing async device read loop: {ex}")
                     break
+            logger.info("Closing websocket since device stopped responding")
             await websocket.close()
 
         device_read_task = asyncio.create_task(device_read_loop())
@@ -73,9 +56,12 @@ class App:
 
         try:
             await device.close()
-            await device_read_task
         except Exception as ex:
-            logger.error(f"Failed to wait for device: {ex}")
+            logger.error(f"Failed close device: {ex}")
+        try:
+            await device_read_task
+        except:
+            logger.error(f"Failed to gracefully terminate device read async task loop")
 
         logger.info("Ending websocket session")
 

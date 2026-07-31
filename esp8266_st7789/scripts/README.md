@@ -4,7 +4,7 @@
     - Option 2 (annoying): Download msys2 and use MSYS environment (not mingw64, mingw32, ...)
 2. Download RTOS SDK by cloning this repo recursively: ```git clone <URL> --recurse-submodules``` or afterwards with ```git submodule update --init --recursive```
 3. Install xtensa toolchain: ```./scripts/install_xtensa_toolchain.sh```.
-4. Create RTOS SDK virtual python environment which requires python 3.10: ```python -m venv venv```
+4. Create RTOS SDK virtual python environment which requires python 3.14: ```python -m venv venv```
 5. Activate python environment: ```source ./venv/bin/activate``` or ```source ./venv/Scripts/activate``` depending on OS.
 6. Install sdk python packages: ```SETUPTOOLS_USE_DISTUTILS=stdlib pip install -r ../vendor/esp8266-rtos-sdk/requirements.txt``` 
     - [fix_1](https://stackoverflow.com/a/76882830)

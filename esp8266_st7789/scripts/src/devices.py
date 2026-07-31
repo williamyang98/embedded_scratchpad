@@ -36,7 +36,7 @@ class ProcessDevice(Device):
         super().__init__()
         self.exec_filepath = exec_filepath
         self.exec_args = exec_args
-        self.exec_filename = os.path.basename(exec_args[0])
+        self.exec_filename = os.path.basename(exec_filepath)
         self.logger = logger.getChild(f"process({self.exec_filename})")
 
         self.process = subprocess.Popen(
@@ -107,9 +107,7 @@ class ProcessDevice(Device):
         while True:
             try:
                 future = asyncio.run_coroutine_threadsafe(self.write_queue.get(), self.event_loop)
-                buffer = future.result(timeout=1000)
-                if buffer is None:
-                    break
+                buffer = future.result()
             except Exception as ex:
                 self.logger.error(f"Error while receiving buffer from write_queue: {ex}")
                 break
@@ -120,17 +118,22 @@ class ProcessDevice(Device):
             except Exception as ex:
                 self.logger.error(f"Error while writing to stdin: {ex}")
                 break
-        self.write_queue.shutdown()
+        self.write_queue.shutdown(immediate=True)
 
     @override
-    def close(self, force=False):
+    async def close(self, force=False):
+        self.logger.info("Terminating process")
         self.process.stdin.close()
+        self.process.stdout.close()
+        self.process.stderr.close()
         if force:
             self.process.terminate()
+        self.logger.info("Shutting down read queue and thread")
         self.read_queue.shutdown(immediate=force)
+        await asyncio.to_thread(self.read_thread.join)
+        self.logger.info("Shutting down write queue and thread")
         self.write_queue.shutdown(immediate=force)
-        self.read_thread.join()
-        self.write_thread.join()
+        await asyncio.to_thread(self.write_thread.join)
 
 class SerialDevice(Device):
     def __init__(self, event_loop, port_name: str, baud_rate: int, is_reset: bool):
@@ -188,7 +191,7 @@ class SerialDevice(Device):
         while True:
             try:
                 future = asyncio.run_coroutine_threadsafe(self.write_queue.get(), self.event_loop)
-                buffer = future.result(timeout=1000)
+                buffer = future.result()
             except Exception as ex:
                 self.logger.error(f"Error while receiving buffer from write_queue: {ex}")
                 break
@@ -201,12 +204,12 @@ class SerialDevice(Device):
         self.write_queue.shutdown()
 
     @override
-    def close(self, force=False):
+    async def close(self, force=False):
         self.serial.close()
         self.read_queue.shutdown(immediate=force)
         self.write_queue.shutdown(immediate=force)
-        self.read_thread.join()
-        self.write_thread.join()
+        await asyncio.to_thread(self.read_thread.join)
+        await asyncio.to_thread(self.write_thread.join)
 
 class WebsocketDevice(Device):
     def __init__(self, client: ClientSession, url: str, heartbeat: float, timeout: float):
