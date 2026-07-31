@@ -3,6 +3,8 @@ import os
 import string
 import collections
 import hashlib
+import humanize
+from tabulate import tabulate, SEPARATING_LINE
 
 def get_paths_recursive(root_path):
     for filename in os.listdir(root_path):
@@ -33,6 +35,28 @@ def get_mime_type(filepath):
 
 FileEntry = collections.namedtuple("FileEntry", ["filepath", "size", "mime_type", "sha1"])
 
+def print_file_entries(file_entries):
+    table_headers = ["filepath", "size", "mime_type", "sha1"]
+    table_rows = []
+
+    total_size_bytes = 0
+    for index, entry in enumerate(file_entries):
+        total_size_bytes += entry.size
+        table_rows.append([
+            f"/{entry.filepath}",
+            humanize.naturalsize(entry.size),
+            entry.mime_type,
+            entry.sha1,
+        ])
+    table_rows.append(SEPARATING_LINE)
+    table_rows.append([
+        None,
+        humanize.naturalsize(total_size_bytes),
+        None,
+        None,
+    ])
+    print(tabulate(table_rows, table_headers, tablefmt="outline"))
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--static", default="./static", type=str, help="Directory of website files")
@@ -59,9 +83,8 @@ def main():
         entry = FileEntry(relative_filepath, size, mime_type, sha1)
         file_entries.append(entry)
 
-    print(f"Indexing {len(file_entries)} files")
-    for index, entry in enumerate(file_entries):
-        print(f"{index}: filepath='/{entry.filepath}',size={entry.size},mime_type='{entry.mime_type}',sha1='{entry.sha1}'")
+    print(f"Indexing {len(file_entries)} files to '{output_filepath}'")
+    print_file_entries(file_entries)
 
     with open(output_filepath, "w+") as fp:
         fp.write("filepath, size, mime_type, sha1\n")
