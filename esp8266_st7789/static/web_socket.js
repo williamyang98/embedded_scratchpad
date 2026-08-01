@@ -49,6 +49,13 @@ export const AppPage = {
   WEATHER_PAGE: 1,
 };
 
+function to_fixed_point(value) {
+  // scale to fixed point with 1 decimal place
+  value = value*10;
+  value = Math.round(value);
+  return value;
+}
+
 export class CommandCreator {
   trigger_render() {
     return new Uint8Array([CommandHeader.TRIGGER_RENDER]);
@@ -60,6 +67,7 @@ export class CommandCreator {
     return new Uint8Array([CommandHeader.SET_SCREEN_BRIGHTNESS, brightness & 0xFF]);
   }
   set_temperature(temperature) {
+    temperature = to_fixed_point(temperature);
     return new Uint8Array([
       CommandHeader.SET_TEMPERATURE,
       (temperature >> 8) & 0xFF,
@@ -67,6 +75,7 @@ export class CommandCreator {
     ]);
   }
   set_humidity(humidity) {
+    humidity = to_fixed_point(humidity);
     return new Uint8Array([
       CommandHeader.SET_HUMIDITY,
       (humidity >> 8) & 0xFF,
@@ -83,6 +92,7 @@ export class CommandCreator {
     ]);
   }
   set_rain_mm(rain_mm) {
+    rain_mm = to_fixed_point(rain_mm);
     return new Uint8Array([
       CommandHeader.SET_RAIN_MM,
       (rain_mm >> 8) & 0xFF,
@@ -90,6 +100,7 @@ export class CommandCreator {
     ]);
   }
   set_wind_kph(wind_kph) {
+    wind_kph = to_fixed_point(wind_kph);
     return new Uint8Array([
       CommandHeader.SET_WIND_KPH,
       (wind_kph >> 8) & 0xFF,

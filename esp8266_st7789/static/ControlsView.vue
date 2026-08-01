@@ -6,10 +6,11 @@ import { debounce_timeout } from "./utility.js";
 const emits = defineEmits(["command"]);
 const command_creator = new CommandCreator();
 
-const temperature_celcius = ref(254);
-const humidity_percent = ref(105);
-const rain_mm = ref(256);
-const wind_kph = ref(52);
+const screen_brightness = ref(50);
+const temperature_celcius = ref(25.4);
+const humidity_percent = ref(10.5);
+const rain_mm = ref(25.6);
+const wind_kph = ref(5.2);
 const time_24_hour_string = ref("16:35")
 const time_24_hour = ref(1635);
 const time_show_24_hour = ref(false);
@@ -18,7 +19,6 @@ const location = ref("Sydney");
 const weather_description = ref("cloudy rain");
 const weather_icon = ref(WeatherIcon.WINTER);
 const moon_phase = ref(MoonPhase.NEW_MOON);
-const screen_brightness = ref(50);
 
 watch(time_24_hour_string, (str) => {
   if (str.length !== 5) return;
@@ -134,19 +134,19 @@ defineExpose({
   </tr>
   <tr>
     <td><label>Temperature</label></td>
-    <td><input type="number" v-model.number="temperature_celcius" min="-999", max="900"><span class="ml-1">°C</span></td>
+    <td><input type="number" v-model.number="temperature_celcius" min="-99.9", max="99.9" step="0.1"><span class="ml-1">°C</span></td>
   </tr>
   <tr>
     <td><label>Humidity</label></td>
-    <td><input type="number" v-model.number="humidity_percent" min="0", max="1000"><span class="ml-1">%</span></td>
+    <td><input type="number" v-model.number="humidity_percent" min="0", max="100.0" step="0.1"><span class="ml-1">%</span></td>
   </tr>
   <tr>
     <td><label>Rain</label></td>
-    <td><input type="number" v-model.number="rain_mm" min="0", max="1000"><span class="ml-1">mm</span></td>
+    <td><input type="number" v-model.number="rain_mm" min="0", max="100.0" step="0.1"><span class="ml-1">mm</span></td>
   </tr>
   <tr>
     <td><label>Wind</label></td>
-    <td><input type="number" v-model.number="wind_kph" min="0", max="1000"><span class="ml-1">kph</span></td>
+    <td><input type="number" v-model.number="wind_kph" min="0", max="100.0" step="0.1"><span class="ml-1">kph</span></td>
   </tr>
   <tr>
     <td><label>Time</label></td>

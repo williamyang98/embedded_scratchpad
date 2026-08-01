@@ -281,21 +281,12 @@ class Server:
             logger.error(f"Failed to parse openmeteo response: {ex}")
             return
 
-        temperature = int(round(res.temperature*10))
-        await self.command_sender.set_temperature(temperature)
-
-        humidity = int(round(res.humidity*10))
-        humidity = max(humidity, 0)
-        await self.command_sender.set_humidity(humidity)
-
-        rain_mm = int(round(max(res.precipitation_arr)*10))
-        rain_mm = max(rain_mm, 0)
+        await self.command_sender.set_temperature(res.temperature)
+        await self.command_sender.set_humidity(res.humidity)
+        rain_mm = max(res.precipitation_arr)
         await self.command_sender.set_rain_mm(rain_mm)
-
-        wind_kph = int(round(max(res.wind_speed_arr)*10))
-        wind_kph = max(wind_kph, 0)
+        wind_kph = max(res.wind_speed_arr)
         await self.command_sender.set_wind_kph(wind_kph)
-
         weather_code = WMO_WEATHER_CODES.get(res.wmo_weather_code, None)
         if weather_code != None:
             await self.command_sender.set_weather_description(weather_code.description.upper())

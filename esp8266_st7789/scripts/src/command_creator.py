@@ -46,6 +46,12 @@ class AppPage(IntEnum):
     LANDING_SCREEN = 0
     WEATHER_PAGE = 1
 
+def to_fixed_point(value: float | int):
+    # scale to fixed point with 1 decimal place
+    value = value*10;
+    value = int(round(value));
+    return value
+
 class CommandCreator:
     def trigger_render(self):
         return bytearray([
@@ -67,7 +73,8 @@ class CommandCreator:
         ])
 
     def set_temperature(self, temperature):
-        assert isinstance(temperature, int)
+        assert isinstance(temperature, int | float)
+        temperature = to_fixed_point(temperature)
         return bytearray([
             int(CommandHeader.SET_TEMPERATURE),
             (temperature >> 8) & 0xFF,
@@ -75,7 +82,8 @@ class CommandCreator:
         ])
 
     def set_humidity(self, humidity):
-        assert isinstance(humidity, int)
+        assert isinstance(humidity, int | float)
+        humidity = to_fixed_point(humidity)
         return bytearray([
             int(CommandHeader.SET_HUMIDITY),
             (humidity >> 8) & 0xFF,
@@ -95,7 +103,8 @@ class CommandCreator:
         ])
 
     def set_rain_mm(self, rain_mm):
-        assert isinstance(rain_mm, int)
+        assert isinstance(rain_mm, int | float)
+        rain_mm = to_fixed_point(rain_mm)
         return bytearray([
             int(CommandHeader.SET_RAIN_MM),
             (rain_mm >> 8) & 0xFF,
@@ -103,7 +112,8 @@ class CommandCreator:
         ])
 
     def set_wind_kph(self, wind_kph):
-        assert isinstance(wind_kph, int)
+        assert isinstance(wind_kph, int | float)
+        wind_kph = to_fixed_point(wind_kph)
         return bytearray([
             int(CommandHeader.SET_WIND_KPH),
             (wind_kph >> 8) & 0xFF,
