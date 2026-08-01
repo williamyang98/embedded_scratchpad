@@ -11,7 +11,7 @@ extern "C" {
 
 static const char TAG[] = "websocket-handler";
 // Refer to CommandHeader in components/st7789/app/commands.hpp to determine what headers are already taken
-static const uint8_t DHT11_CMD = 0x0A;
+static const uint8_t DHT11_CMD = 0xA0;
 
 static struct WebsocketClient* dht11_websocket_client = NULL;
 

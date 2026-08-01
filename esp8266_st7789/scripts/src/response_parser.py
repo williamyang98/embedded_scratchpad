@@ -9,17 +9,27 @@ class ResponseHeader:
     LOG_MESSAGE = 0x02
     DEBUG_MESSAGE = 0x03
     DEBUG_FRAME = 0x04
+    # non-st7789 responses
+    GET_DHT11 = 0xA0
 
 class EmptyDecodedResponse(Exception):
     pass
 
-class ResponseIncorrectLength(Exception):
-    def __init__(self, header, expected_length, given_length):
-        message = f"header={header:02X} has incorrect length expected={expected_length} but given={given_length}"
+class MinimumLengthError(Exception):
+    def __init__(self, header, minimum, given):
+        message = f"header {header:02X} expected minimum length of {minimum} but was given {given}"
         super().__init__(message)
         self.header = header
-        self.expected_length
-        self.given_length
+        self.minimum = minimum
+        self.given = given
+
+class ExactLengthError(Exception):
+    def __init__(self, header, expected, given):
+        message = f"header {header:02X} expected exact length of {expected} but was given {given}"
+        super().__init__(message)
+        self.header = header
+        self.expected = expected
+        self.given = given
 
 class UnhandledResponse(Exception):
     def __init__(self, header, data):
@@ -27,6 +37,16 @@ class UnhandledResponse(Exception):
         super().__init__(message)
         self.data = data
         self.header = header
+
+class DHT11Response:
+    def __init__(self, temperature: int | None, humidity: int | None, error_code: int | None):
+        self.is_success = error_code == None
+        if self.is_success:
+            assert temperature != None, "temperature field must be provided on success"
+            assert humidity != None, "humidity field must be provided on success"
+        self.temperature = temperature
+        self.humidity = humidity
+        self.error_code = error_code
 
 class ResponseHandler(ABC):
     @abstractmethod
@@ -49,6 +69,10 @@ class ResponseHandler(ABC):
     async def debug_frame(self, frame: Frame):
         pass
 
+    @abstractmethod
+    async def get_dht11(self, dht11: DHT11Response):
+        pass
+
 class ResponseParser:
     def __init__(self, handler: ResponseHandler):
         self.handler = handler
@@ -59,18 +83,23 @@ class ResponseParser:
 
         header = data[0]
 
-        def assert_length(expected_length):
-            given_length = len(data)
-            if given_length != expected_length:
-                raise ResponseIncorrectLength(header, expected_length, given_length)
+        def assert_minimum_length(minimum):
+            given = len(data)
+            if given < minimum:
+                raise MinimumLengthError(header, minimum, given)
+
+        def assert_exact_length(expected):
+            given = len(data)
+            if given != expected:
+                raise ExactLengthError(header, expected, given)
 
         if header == ResponseHeader.ACKNOWLEDGE_COMMAND:
-            assert_length(3)
+            assert_exact_length(3)
             ack_header = data[1]
             is_success = data[2] != 0
             await self.handler.acknowledge_command(ack_header, is_success)
         elif header == ResponseHeader.RENDER_STATUS:
-            assert_length(2)
+            assert_exact_length(2)
             is_busy = data[1] != 0
             await self.handler.render_status(is_busy)
         elif header == ResponseHeader.LOG_MESSAGE:
@@ -85,6 +114,19 @@ class ResponseParser:
             frame_data = data[1:]
             frame = Frame(frame_data)
             await self.handler.debug_frame(frame)
+        elif header == ResponseHeader.GET_DHT11:
+            assert_minimum_length(2)
+            if len(data) == 2:
+                error_code = data[1]
+                dht11 = DHT11Response(None, None, error_code)
+                await self.handler.get_dht11(dht11)
+            elif len(data) == 3:
+                humidity = data[1]
+                temperature = data[2]
+                dht11 = DHT11Response(temperature, humidity, None)
+                await self.handler.get_dht11(dht11)
+            else:
+                raise Exception(f"Unhandled dht11 response with header={header:02X}, length={len(data)}")
         else:
             raise UnhandledResponse(header, data)
 

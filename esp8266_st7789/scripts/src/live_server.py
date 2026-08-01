@@ -14,6 +14,7 @@ from response_parser import ResponseHandler, ResponseParser
 from command_creator import CommandSender, WeatherIcon, MoonPhase
 from wmo_weather_codes import WMO_WEATHER_CODES
 from typing_extensions import override
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,85 @@ class CustomResponseHandler(ResponseHandler):
     async def debug_frame(self, frame):
         pass
 
+    @override
+    async def get_dht11(self, dht11):
+        if dht11.is_success:
+            logger.info(f"Got dht11 temperature={dht11.temperature}°C, humidity={dht11.humidity}%")
+        else:
+            logger.warning(f"Got dht11 error_code={dht11.error_code}")
+
 def get_openmeteo_url(latitude, longitude):
     assert isinstance(latitude, float)
     assert isinstance(longitude, float)
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
     LOCATION_QUERY = f"latitude={latitude:.6f}&longitude={longitude:.6f}"
-    PARAMETERS = ["temperature_2m", "relative_humidity_2m", "wind_speed_10m", "weather_code"]
-    return f"{BASE_URL}?{LOCATION_QUERY}&current={','.join(PARAMETERS)}"
+    CURRENT_PARAMETERS = ["temperature_2m", "relative_humidity_2m", "weather_code"]
+    HOURLY_PARAMETERS = ["wind_speed_10m", "precipitation"]
+    QUERY_PARAMS = [
+        ("latitude", f"{latitude:.6f}"),
+        ("longitude", f"{longitude:.6f}"),
+        ("current", ",".join(CURRENT_PARAMETERS)),
+        ("hourly", ",".join(HOURLY_PARAMETERS)),
+        ("forecast_days", "1"),
+    ]
+    QUERY_STRING = "&".join((f"{key}={value}" for (key, value) in QUERY_PARAMS))
+    return f"{BASE_URL}?{QUERY_STRING}"
+
+@dataclass
+class OpenmeteoResponse:
+    latitude: float
+    longitude: float
+    temperature: float | int
+    humidity: float | int
+    wmo_weather_code: int
+    wind_speed_arr: list[int | float]
+    precipitation_arr: list[int | float]
+
+def parse_openmeteo_response(response: dict) -> OpenmeteoResponse:
+    assert isinstance(response, dict), f"openmeteo api response must be type '{dict}' but got type '{type(response)}'"
+    def get(obj, key, dtype, required=True):
+        assert isinstance(obj, dict), f"parent for field '{key}' must be type '{dict}' but got type '{type(obj)}'"
+        value = obj.get(key, None)
+        if value == None:
+            if required:
+                raise Exception(f"Missing '{key}' field")
+            return value
+        assert isinstance(value, dtype), f"'{key}' field must be of type '{dtype}' but got '{type(value)}'"
+        return value
+
+    def get_arr(obj, key, dtype, required=True):
+        assert isinstance(obj, dict), f"parent for field '{key}' must be type '{dict}' but got type '{type(obj)}'"
+        arr = obj.get(key, None)
+        if arr == None:
+            if required:
+                raise Exception(f"Missing '{key}' field")
+            return arr
+        assert isinstance(arr, list), f"'{key}' field must be of type '{list}' but got '{type(arr)}'"
+        assert len(arr) > 0, f"'{key}' array must not be empty"
+        assert all((isinstance(value, dtype) for value in arr)), f"'{key}' field must be of type 'list[{dtype}]' but got types '{[type(value) for value in arr]}'"
+        return arr
+
+    latitude = get(response, "latitude", float)
+    longitude = get(response, "longitude", float)
+
+    current = get(response, "current", dict)
+    temperature = get(current, "temperature_2m", float | int)
+    humidity = get(current, "relative_humidity_2m", float | int)
+    wmo_weather_code = get(current, "weather_code", int)
+
+    hourly = get(response, "hourly", dict)
+    wind_speed_arr = get_arr(hourly, "wind_speed_10m", float | int)
+    precipitation_arr = get_arr(hourly, "precipitation", float | int)
+
+    return OpenmeteoResponse(
+        latitude,
+        longitude,
+        temperature,
+        humidity,
+        wmo_weather_code,
+        wind_speed_arr,
+        precipitation_arr,
+    )
 
 def graceful_fail(func):
     @functools.wraps(func)
@@ -155,6 +228,7 @@ class Server:
             await self.on_connection()
             while True:
                 await self.update_time()
+                await self.get_dht11()
                 await self.update_weather()
                 await self.update_moon()
                 await self.trigger_render()
@@ -187,6 +261,11 @@ class Server:
         time_24_hour = now.hour*100 + now.minute
         await self.command_sender.set_24_hour_time(time_24_hour, False, True)
 
+    @graceful_fail
+    @wait_render_fence
+    async def get_dht11(self):
+        await self.command_sender.get_dht11()
+
     @trigger_every(60)
     @graceful_fail
     @wait_render_fence
@@ -196,35 +275,33 @@ class Server:
             logger.error(f"Got a bad response from openmeteo with code={response.status_code}")
             return
         data = json.loads(response.text)
-        current = data.get("current", None)
-        if current == None:
-            logger.error(f"Missing current data")
+        try:
+            res = parse_openmeteo_response(data)
+        except Exception as ex:
+            logger.error(f"Failed to parse openmeteo response: {ex}")
             return
-        assert isinstance(current, dict)
 
-        temperature = current.get("temperature_2m", None)
-        humidity = current.get("relative_humidity_2m", None)
-        wind_speed = current.get("wind_speed_10m", None)
-        wmo_weather_code = current.get("weather_code", None)
+        temperature = int(round(res.temperature*10))
+        await self.command_sender.set_temperature(temperature)
 
-        if temperature != None:
-            temperature = int(round(temperature*10))
-            await self.command_sender.set_temperature(temperature)
-        if humidity != None:
-            humidity = int(round(humidity*10))
-            humidity = max(humidity, 0)
-            await self.command_sender.set_humidity(humidity)
-        if wind_speed != None:
-            wind_speed = int(round(wind_speed*10))
-            wind_speed = max(wind_speed, 0)
-            await self.command_sender.set_wind_kph(wind_speed)
-        if wmo_weather_code != None:
-            weather_code = WMO_WEATHER_CODES.get(wmo_weather_code, None)
-            if weather_code != None:
-                await self.command_sender.set_weather_description(weather_code.description.upper())
-                await self.command_sender.set_weather_icon(weather_code.weather_icon)
-            else:
-                logger.warning(f"Failed to fetch wmo weather code: {wmo_weather_code}")
+        humidity = int(round(res.humidity*10))
+        humidity = max(humidity, 0)
+        await self.command_sender.set_humidity(humidity)
+
+        rain_mm = int(round(max(res.precipitation_arr)*10))
+        rain_mm = max(rain_mm, 0)
+        await self.command_sender.set_rain_mm(rain_mm)
+
+        wind_kph = int(round(max(res.wind_speed_arr)*10))
+        wind_kph = max(wind_kph, 0)
+        await self.command_sender.set_wind_kph(wind_kph)
+
+        weather_code = WMO_WEATHER_CODES.get(res.wmo_weather_code, None)
+        if weather_code != None:
+            await self.command_sender.set_weather_description(weather_code.description.upper())
+            await self.command_sender.set_weather_icon(weather_code.weather_icon)
+        else:
+            logger.warning(f"Failed to fetch wmo weather code: {wmo_weather_code}")
 
     @trigger_every(60)
     @graceful_fail
@@ -257,6 +334,9 @@ async def main():
     add_device_argument_subparsers(subparsers)
     args = parser.parse_args()
 
+    openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
+    logger.info(f"openmeteo_url: {openmeteo_url}")
+
     device_res = get_device_factory_from_args(args.mode, args)
     if device_res["type"] == "exit_code":
         return device_res["exit_code"]
@@ -269,7 +349,6 @@ async def main():
             render_fence = RenderFence()
             device = None
             device = await device_factory.create_device()
-            openmeteo_url = get_openmeteo_url(args.latitude, args.longitude)
             server = Server(device, render_fence, openmeteo_url, args.location, args.screen_brightness)
             await server.run()
         except KeyboardInterrupt:

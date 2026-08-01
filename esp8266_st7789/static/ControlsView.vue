@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watchEffect } from "vue";
+import { ref, watch, watchEffect } from "vue";
 import { CommandCreator, WeatherIcon, MoonPhase } from "./web_socket.js";
 import { debounce_timeout } from "./utility.js";
 
@@ -8,7 +8,9 @@ const command_creator = new CommandCreator();
 
 const temperature_celcius = ref(254);
 const humidity_percent = ref(105);
+const rain_mm = ref(256);
 const wind_kph = ref(52);
+const time_24_hour_string = ref("16:35")
 const time_24_hour = ref(1635);
 const time_show_24_hour = ref(false);
 const time_show_leading_zeros = ref(false);
@@ -17,6 +19,16 @@ const weather_description = ref("cloudy rain");
 const weather_icon = ref(WeatherIcon.WINTER);
 const moon_phase = ref(MoonPhase.NEW_MOON);
 const screen_brightness = ref(50);
+
+watch(time_24_hour_string, (str) => {
+  if (str.length !== 5) return;
+  const parts = str.split(":");
+  if (parts.length !== 2) return;
+  const [hours_str, minutes_str] = parts;
+  const hours = Number.parseInt(hours_str);
+  const minutes = Number.parseInt(minutes_str);
+  time_24_hour.value = hours*100 + minutes;
+}, { immediate: true });
 
 function emit_command(command) {
   emits("command", command);
@@ -50,6 +62,10 @@ function set_time_24_hour() {
   ));
 }
 
+function set_rain_mm() {
+  emit_command(command_creator.set_rain_mm(rain_mm.value));
+}
+
 function set_wind_kph() {
   emit_command(command_creator.set_wind_kph(wind_kph.value));
 }
@@ -70,20 +86,22 @@ function set_moon_phase() {
   emit_command(command_creator.set_moon_phase(moon_phase.value));
 }
 
-watchEffect(set_screen_brightness);
 watchEffect(set_temperature);
-watchEffect(set_wind_kph);
 watchEffect(set_humidity);
+watchEffect(set_rain_mm);
+watchEffect(set_wind_kph);
 watchEffect(set_time_24_hour);
 watchEffect(set_location);
 watchEffect(set_weather_description);
 watchEffect(set_weather_icon);
 watchEffect(set_moon_phase);
+watchEffect(set_screen_brightness);
 
 function refresh_all() {
   set_temperature();
-  set_wind_kph();
   set_humidity();
+  set_rain_mm();
+  set_wind_kph();
   set_time_24_hour();
   set_location();
   set_weather_description();
@@ -116,19 +134,23 @@ defineExpose({
   </tr>
   <tr>
     <td><label>Temperature</label></td>
-    <td><input type="number" v-model.number="temperature_celcius" min="-999", max="900">
+    <td><input type="number" v-model.number="temperature_celcius" min="-999", max="900"><span class="ml-1">°C</span></td>
   </tr>
   <tr>
     <td><label>Humidity</label></td>
-    <td><input type="number" v-model.number="humidity_percent" min="0", max="1000"></td>
+    <td><input type="number" v-model.number="humidity_percent" min="0", max="1000"><span class="ml-1">%</span></td>
+  </tr>
+  <tr>
+    <td><label>Rain</label></td>
+    <td><input type="number" v-model.number="rain_mm" min="0", max="1000"><span class="ml-1">mm</span></td>
   </tr>
   <tr>
     <td><label>Wind</label></td>
-    <td><input type="number" v-model.number="wind_kph" min="0", max="1000"></td>
+    <td><input type="number" v-model.number="wind_kph" min="0", max="1000"><span class="ml-1">kph</span></td>
   </tr>
   <tr>
     <td><label>Time</label></td>
-      <td><input type="number" v-model.number="time_24_hour" min="0", max="2400"></td>
+      <td><input type="time" v-model="time_24_hour_string" step="60"></td>
   </tr>
   <tr>
     <td><label>Time leading zeros</label></td>
@@ -155,7 +177,7 @@ defineExpose({
         <option :value="MoonPhase.FIRST_QUARTER">first quarter</option>
         <option :value="MoonPhase.WAXING_GIBBOUS">waxing gibbous</option>
         <option :value="MoonPhase.FULL_MOON">full moon</option>
-        <option :value="MoonPhase.WANING_GIBBOUS">Waning gibbous</option>
+        <option :value="MoonPhase.WANING_GIBBOUS">waning gibbous</option>
         <option :value="MoonPhase.THIRD_QUARTER">third quarter</option>
         <option :value="MoonPhase.WANING_CRESCENT">waning crescent</option>
       </select>
@@ -176,3 +198,9 @@ defineExpose({
 </tbody>
 </table>
 </template>
+
+<style scoped>
+.ml-1 {
+  margin-left: 0.5rem;
+}
+</style>

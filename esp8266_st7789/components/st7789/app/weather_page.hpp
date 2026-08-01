@@ -9,6 +9,7 @@
 #include "../glyphs/small_font.hpp"
 #include "../glyphs/icons.hpp"
 #include "./moon_phases.hpp"
+#include "./rain_amounts.hpp"
 #include "./wind_speeds.hpp"
 #include "./weather_icons.hpp"
 #include "./response.hpp"
@@ -25,6 +26,7 @@ private:
     uint16_t m_humidity_percent = 0;
     char m_location[MAX_TEXT_LENGTH+1] = {0};
     char m_weather_description[MAX_TEXT_LENGTH+1] = {0};
+    uint16_t m_rain_mm = 0;
     uint16_t m_wind_kph = 0;
     MoonPhase m_moon_phase = MoonPhase::FULL_MOON;
     struct {
@@ -38,6 +40,7 @@ private:
         RightToLeftPrinter humidity;
         LeftToRightPrinter location;
         LeftToRightPrinter weather_description;
+        LeftToRightPrinter rain;
         LeftToRightPrinter wind;
         LeftToRightPrinter moon;
         void reset() {
@@ -47,6 +50,7 @@ private:
             humidity.reset_x_end();
             location.reset_x_start();
             weather_description.reset_x_start();
+            rain.reset_x_start();
             wind.reset_x_start();
             moon.reset_x_start();
         }
@@ -57,13 +61,14 @@ private:
             humidity.text_colour = text_colour;
             location.text_colour = text_colour;
             weather_description.text_colour = text_colour;
+            rain.text_colour = text_colour;
             wind.text_colour = text_colour;
             moon.text_colour = text_colour;
         }
     } m_printers;
     rgb565_t m_text_colour = COLOUR.WHITE;
     uint16_t m_x_margin = 10;
-    uint16_t m_y_margin = 10;
+    uint16_t m_y_margin = 9;
     struct {
         RadialBackgroundColour freezing;
         RadialBackgroundColour cold;
@@ -87,6 +92,7 @@ private:
         bool humidity;
         bool location;
         bool weather_description;
+        bool rain;
         bool wind;
         bool moon;
         void set_all(bool state) {
@@ -97,6 +103,7 @@ private:
             humidity = state;
             location = state;
             weather_description = state;
+            rain = state;
             wind = state;
             moon = state;
         }
@@ -129,10 +136,12 @@ public:
             m_printers.humidity.y_end = y_text_end-1;
             m_printers.weather_icon.y_end = (m_printers.temperature.y_end+m_printers.humidity.y_end)/2;
             // small text
-            y_text_end += 2*m_y_margin+small_font::MAX_HEIGHT;
+            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
             m_printers.location.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
             m_printers.weather_description.y_end = y_text_end-1;
+            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            m_printers.rain.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
             m_printers.wind.y_end = y_text_end-1;
             y_text_end += m_y_margin+small_font::MAX_HEIGHT;
@@ -158,11 +167,12 @@ public:
         if (m_render_mask.humidity) render_humidity();
         if (m_render_mask.location) render_location();
         if (m_render_mask.weather_description) render_weather_description();
+        if (m_render_mask.rain) render_rain();
         if (m_render_mask.wind) render_wind();
         if (m_render_mask.moon) render_moon();
         m_render_mask.set_all(false);
         m_response_sender.send_render_status(false);
-        DEBUG_FRAME("render_all: temperature={0}°C, humidity={1}%, wind={2}kph", m_temperature_celcius, m_humidity_percent, m_wind_kph);
+        DEBUG_FRAME("render_all: temperature={0}°C, humidity={1}%, rain={2}mm, wind={3}kph", m_temperature_celcius, m_humidity_percent, m_rain_mm, m_wind_kph);
     }
 
     void set_time(uint16_t time_24_hour) {
@@ -229,7 +239,13 @@ public:
         m_render_mask.weather_description = true;
     }
 
-    void set_wind(uint16_t wind_kph) {
+    void set_rain_mm(uint16_t rain_mm) {
+        const bool is_changed = m_rain_mm != rain_mm;
+        m_render_mask.rain |= is_changed;
+        m_rain_mm = rain_mm;
+    }
+
+    void set_wind_kph(uint16_t wind_kph) {
         const bool is_changed = m_wind_kph != wind_kph;
         m_render_mask.wind |= is_changed;
         m_wind_kph = wind_kph;
@@ -377,6 +393,35 @@ private:
         }
         const char* description = m_weather_description;
         printer.print_string(description, background_colour, get_glyph);
+        printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
+    }
+
+    void render_rain() {
+        auto& background_colour = get_background_colour();
+        namespace font = small_font;
+        const auto get_glyph = &font::get_glyph;
+        auto& printer = m_printers.rain;
+        printer.x_start = m_x_margin;
+        const auto* icon = icons::small::get_icon(icons::small::Icon::RAIN_DROP);
+        if (icon != nullptr) {
+            printer.print_glyph(icon, background_colour);
+            printer.print_char(' ', background_colour, get_glyph);
+        }
+        const auto digits = Digits(m_rain_mm);
+        int8_t leading_non_zero_digit_index = digits.leading_non_zero_digit_index;
+        if (leading_non_zero_digit_index < 1) leading_non_zero_digit_index = 1;
+        for (int8_t i = leading_non_zero_digit_index; i >= 0; i--) {
+            const uint8_t digit = digits[i];
+            if (i == 0) printer.print_char('.', background_colour, get_glyph);
+            printer.print_char('0'+digit, background_colour, get_glyph);
+        }
+        printer.print_string("MM", background_colour, get_glyph);
+        const RainCategory category = get_rain_category(m_rain_mm);
+        const auto* rain_description = get_rain_description(category);
+        if (rain_description != nullptr) {
+            printer.print_char(' ', background_colour, get_glyph);
+            printer.print_string(rain_description, background_colour, get_glyph);
+        }
         printer.cleanup_previous_prints(font::MAX_HEIGHT, background_colour);
     }
 

@@ -17,11 +17,12 @@ export const CommandHeader = {
   SET_LOCATION: 0x06,
   SET_WEATHER_DESCRIPTION: 0x07,
   SET_MOON_PHASE: 0x08,
+  SET_RAIN_MM: 0x09,
   // set page
   SET_SCREEN_BRIGHTNESS: 0xFE,
   SET_PAGE: 0xFF,
   // non-st7789 commands
-  GET_DHT11: 0x0A,
+  GET_DHT11: 0xA0,
 };
 
 export const WeatherIcon = {
@@ -81,6 +82,13 @@ export class CommandCreator {
       is_show_leading_zero ? 0xFF : 0x00,
     ]);
   }
+  set_rain_mm(rain_mm) {
+    return new Uint8Array([
+      CommandHeader.SET_RAIN_MM,
+      (rain_mm >> 8) & 0xFF,
+      rain_mm & 0xFF,
+    ]);
+  }
   set_wind_kph(wind_kph) {
     return new Uint8Array([
       CommandHeader.SET_WIND_KPH,
@@ -131,7 +139,7 @@ export const ResponseHeader = {
   DEBUG_MESSAGE: 0x03,
   DEBUG_FRAME: 0x04,
   // non-st7789 responses
-  GET_DHT11: 0x0A,
+  GET_DHT11: 0xA0,
 };
 
 export class MinimumLengthError extends Error {

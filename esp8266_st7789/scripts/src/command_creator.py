@@ -2,7 +2,8 @@ from enum import IntEnum
 import functools
 import inspect
 
-# ../src/app/commands.hpp
+# transmitter for components/st7789/app/commands.hpp
+# websocket_on_binary_frame @ main/websocket_handler.cpp
 class CommandHeader(IntEnum):
     TRIGGER_RENDER = 0x00
     # weather page
@@ -14,9 +15,12 @@ class CommandHeader(IntEnum):
     SET_LOCATION = 0x06
     SET_WEATHER_DESCRIPTION = 0x07
     SET_MOON_PHASE = 0x08
+    SET_RAIN_MM = 0x09
     # set page
     SET_SCREEN_BRIGHTNESS = 0xFE
     SET_PAGE = 0xFF
+    # non st7789 commands
+    GET_DHT11 = 0xA0
 
 # ../src/app/weather_icons.hpp
 class WeatherIcon(IntEnum):
@@ -90,6 +94,14 @@ class CommandCreator:
             0xFF if is_show_leading_zero else 0x00,
         ])
 
+    def set_rain_mm(self, rain_mm):
+        assert isinstance(rain_mm, int)
+        return bytearray([
+            int(CommandHeader.SET_RAIN_MM),
+            (rain_mm >> 8) & 0xFF,
+            rain_mm & 0xFF,
+        ])
+
     def set_wind_kph(self, wind_kph):
         assert isinstance(wind_kph, int)
         return bytearray([
@@ -124,6 +136,11 @@ class CommandCreator:
         return bytearray([
             int(CommandHeader.SET_MOON_PHASE),
             int(moon_phase),
+        ])
+
+    def get_dht11(self):
+        return bytearray([
+            int(CommandHeader.GET_DHT11),
         ])
 
 def create_command_sender(cls):

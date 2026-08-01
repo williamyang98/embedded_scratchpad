@@ -16,6 +16,7 @@ enum class CommandHeader: uint8_t {
     SET_LOCATION = 0x06,
     SET_WEATHER_DESCRIPTION = 0x07,
     SET_MOON_PHASE = 0x08,
+    SET_RAIN_MM = 0x09,
     // set page
     SET_SCREEN_BRIGHTNESS = 0xFE,
     SET_PAGE = 0xFF,
@@ -72,12 +73,20 @@ private:
             weather_page.set_humidity(humidity);
             return true;
         }
+        if (header == CommandHeader::SET_RAIN_MM) {
+            if (length != 3) return false;
+            uint16_t rain_mm = 0;
+            rain_mm |= static_cast<uint16_t>(buffer[1]) << 8;
+            rain_mm |= static_cast<uint16_t>(buffer[2]);
+            weather_page.set_rain_mm(rain_mm);
+            return true;
+        }
         if (header == CommandHeader::SET_WIND_KPH) {
             if (length != 3) return false;
             uint16_t wind_kph = 0;
             wind_kph |= static_cast<uint16_t>(buffer[1]) << 8;
             wind_kph |= static_cast<uint16_t>(buffer[2]);
-            weather_page.set_wind(wind_kph);
+            weather_page.set_wind_kph(wind_kph);
             return true;
         }
         if (header == CommandHeader::SET_TIME_24_HOUR) {
