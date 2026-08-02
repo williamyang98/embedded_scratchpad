@@ -1,6 +1,10 @@
 from frame import Frame
 from abc import ABC, abstractmethod
+from enum import IntEnum
 import struct
+import logging
+
+logger = logging.getLogger(__name__)
 
 # python receiver counterpart to ResponseHeader and ResponseSender in ../src/response.hpp
 class ResponseHeader:
@@ -38,6 +42,19 @@ class UnhandledResponse(Exception):
         self.data = data
         self.header = header
 
+# components/dht11/include/dht11.hpp
+class DHT11ReadStatus(IntEnum):
+    OK = 0x00
+    START_PULLDOWN_1_TIMEOUT = 0x01
+    START_PULLUP_TIMEOUT = 0x01
+    START_PULLDOWN_2_TIMEOUT = 0x02
+    DATA_START_TO_TRANSMIT_TIMEOUT = 0x3
+    DATA_PULLDOWN_TIMEOUT = 0x4
+    DATA_PULLUP_TIMEOUT = 0x5
+    DATA_PULLUP_TOO_SHORT = 0x6
+    DATA_PULLUP_TOO_LONG = 0x7
+    CHECKSUM_FAIL = 0x8
+
 class DHT11Response:
     def __init__(self, temperature: int | None, humidity: int | None, error_code: int | None):
         self.is_success = error_code == None
@@ -46,6 +63,11 @@ class DHT11Response:
             assert humidity != None, "humidity field must be provided on success"
         self.temperature = temperature
         self.humidity = humidity
+        if error_code != None:
+            try:
+                error_code = DHT11Status(error_code)
+            except ValueError:
+                logger.warning(f"Unhandled dht11 read status {error_code}")
         self.error_code = error_code
 
 class ResponseHandler(ABC):

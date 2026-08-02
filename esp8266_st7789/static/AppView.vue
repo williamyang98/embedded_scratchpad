@@ -3,7 +3,11 @@ import { ref, reactive, useTemplateRef, computed, watch, onMounted } from "vue";
 import FrameView from "./FrameView.vue";
 import ControlsView from "./ControlsView.vue";
 import FrameHeaderTable from "./FrameHeaderTable.vue"
-import { parse_websocket_response, CommandCreator, DEFAULT_WEBSOCKET_URL } from "./web_socket.js";
+import {
+  parse_websocket_response, dht11_read_status_to_string,
+  CommandCreator,
+  DEFAULT_WEBSOCKET_URL,
+} from "./web_socket.js";
 
 const frame_elem = useTemplateRef("frame");
 const controls_elem = useTemplateRef("controls");
@@ -171,7 +175,7 @@ watch(websocket_state, (websocket_state) => {
         <tr>
           <td style="width: 33%">{{ dht11.temperature === null ? '?' : `${dht11.temperature}°C` }}</td>
           <td style="width: 33%">{{ dht11.humidity === null ? '?' : `${dht11.humidity}%` }}</td>
-          <td>{{ dht11.error_code === null ? 'Good' : `Error(${dht11.error_code})` }}</td>
+          <td>{{ dht11.error_code === null ? 'Good' : `Error(${dht11_read_status_to_string(dht11.error_code)})` }}</td>
         </tr>
       </tbody>
     </table>

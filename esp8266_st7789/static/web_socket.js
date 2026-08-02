@@ -182,6 +182,36 @@ export class UnhandledResponse extends Error {
   }
 }
 
+// components/dht11/include/dht11.hpp
+export const DHT11ReadStatus = {
+  OK: 0x00,
+  START_PULLDOWN_1_TIMEOUT: 0x01,
+  START_PULLUP_TIMEOUT: 0x01,
+  START_PULLDOWN_2_TIMEOUT: 0x02,
+  DATA_START_TO_TRANSMIT_TIMEOUT: 0x3,
+  DATA_PULLDOWN_TIMEOUT: 0x4,
+  DATA_PULLUP_TIMEOUT: 0x5,
+  DATA_PULLUP_TOO_SHORT: 0x6,
+  DATA_PULLUP_TOO_LONG: 0x7,
+  CHECKSUM_FAIL: 0x8,
+};
+
+export function dht11_read_status_to_string(code) {
+  switch (code) {
+  case DHT11ReadStatus.OK: return "OK";
+  case DHT11ReadStatus.START_PULLDOWN_1_TIMEOUT: return "START_PULLDOWN_1_TIMEOUT";
+  case DHT11ReadStatus.START_PULLUP_TIMEOUT: return "START_PULLUP_TIMEOUT";
+  case DHT11ReadStatus.START_PULLDOWN_2_TIMEOUT: return "START_PULLDOWN_2_TIMEOUT";
+  case DHT11ReadStatus.DATA_START_TO_TRANSMIT_TIMEOUT: return "DATA_START_TO_TRANSMIT_TIMEOUT";
+  case DHT11ReadStatus.DATA_PULLDOWN_TIMEOUT: return "DATA_PULLDOWN_TIMEOUT";
+  case DHT11ReadStatus.DATA_PULLUP_TIMEOUT: return "DATA_PULLUP_TIMEOUT";
+  case DHT11ReadStatus.DATA_PULLUP_TOO_SHORT: return "DATA_PULLUP_TOO_SHORT";
+  case DHT11ReadStatus.DATA_PULLUP_TOO_LONG: return "DATA_PULLUP_TOO_LONG";
+  case DHT11ReadStatus.CHECKSUM_FAIL: return "CHECKSUM_FAIL";
+  default: return `UNKNOWN(0x${code.toString(16).padStart(2, '0').toUpperCase()})`;
+  }
+}
+
 export function parse_websocket_response(data) {
   if (data.length === 0) {
     return Error("Empty frame");

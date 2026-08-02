@@ -1,8 +1,8 @@
 extern "C" {
-#include "dht11.h"
 #include "global_pwm.h"
 }
 
+#include "dht11.hpp"
 #include "websocket_handler.hpp"
 #include "global_periphs.hpp"
 #include <memory>
@@ -26,14 +26,14 @@ static void websocket_async_send_dht11(struct WebsocketClient* client, void *arg
 
     size_t length = 0;
     buffer[0] = DHT11_CMD;
-    struct DHT11_Measurement measurement;
-    const bool is_read_success = dht11_read(g_dht11_data_pin, &measurement) == ESP_OK;
-    if (is_read_success) {
+    struct DHT11::Measurement measurement;
+    const DHT11::ReadStatus read_status = g_dht11.read(measurement);
+    if (read_status == DHT11::ReadStatus::OK) {
         buffer[1] = measurement.humidity;
         buffer[2] = measurement.temperature;
         length = 3;
     } else {
-        buffer[1] = 0xFF;
+        buffer[1] = static_cast<uint8_t>(read_status);
         length = 2;
     }
     const esp_err_t status = websocket_send_pending_binary_data_async(client, length);

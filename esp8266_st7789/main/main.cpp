@@ -18,13 +18,13 @@ extern "C" {
 #include <esp_spi_flash.h>
 #include <esp_spiffs.h>
 #include <esp_system.h>
-#include "dht11.h"
 #include "webserver.h"
 #include "websocket.h"
 #include "wifi_sta.h"
 #include "global_pwm.h"
 }
 
+#include "dht11.hpp"
 #include "hardware/tft.hpp"
 #include "graphics/render_glyphs.hpp"
 #include "global_periphs.hpp"
@@ -35,7 +35,9 @@ extern "C" {
 const char INIT_TAG[] = "main-init";
 
 httpd_handle_t g_http_server = nullptr; // extern
-const gpio_num_t g_dht11_data_pin = GPIO_NUM_2; // extern
+DHT11 g_dht11 = {  // extern
+    .pin = GPIO_NUM_2,
+};
 struct Websocket g_websocket = { // extern
     // buffers
     .receive_buffer_size = 0,
@@ -78,12 +80,9 @@ extern "C" void app_main(void) {
     esp_set_cpu_freq(ESP_CPU_FREQ_160M);
     ESP_LOGI(INIT_TAG, "Changing cpu to 160MHz");
 
-    if (dht11_init(g_dht11_data_pin) == ESP_OK) {
-        ESP_LOGI(INIT_TAG, "initialised dht11 sensor on pin: %u", g_dht11_data_pin);
-    } else {
-        ESP_LOGE(INIT_TAG, "failed to initialise dht11 sensor on pin: %u", g_dht11_data_pin);
-    }
+    g_dht11.init();
 
+    // init before global_pwm_init() for those using pwm pins
     tft::init(); // backlight led
     g_green_led.init();
     ESP_ERROR_CHECK(global_pwm_init());
@@ -96,6 +95,7 @@ extern "C" void app_main(void) {
         }
     }
 
+    // init before gpio_install_isr_service() for those using gpio interrupts
     {
         const int _no_use = 0;
         gpio_install_isr_service(_no_use);
