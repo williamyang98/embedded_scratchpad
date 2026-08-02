@@ -76,6 +76,11 @@ static constexpr struct {
 
 static uint8_t BACKLIGHT_PWM_CHANNEL = 0;
 
+// https://github.com/espressif/ESP8266_RTOS_SDK/tree/release/v3.4/examples/peripherals/spi/high_performance/spi_master
+// We use IRAM_ATTR to store function in instruction ram
+// For sdkconfig we set the following
+// - CONFIG_FREERTOS_CODE_LINK_TO_IRAM=y
+// - CONFIG_ESP8266_HSPI_HIGH_THROUGHPUT=y
 namespace spi {
 
 // spi that sends 16bits at a time for pixel data
@@ -117,13 +122,23 @@ static void init() {
     spi_config.interface.cs_en = 0;
     // Disable MISO pin D6/GPIO12 to free it for other GPIO operations
     spi_config.interface.miso_en = 0;
-    // CPOL: 1, CPHA: 0
-    spi_config.interface.cpol = 1;
-    spi_config.interface.cpha = 0;
     // Set SPI to master mode
     spi_config.mode = SPI_MASTER_MODE;
+
     // Set the SPI clock frequency division factor
-    spi_config.clk_div = SPI_80MHz_DIV;
+    // DOC: datasheets/sitronix_st7789_datasheet.pdf
+    // Section 7.4.3 @ Page 44: Serial Interface Characteristics (4-line serial)
+    // Figure 5: 4-line serial Interface Timing Characteristics
+    // Table 6: 4-line serial Interface Characteristics
+    // Absolute minimum for Tscycw = 16ns, the serial clock cycle for writing
+    // This is roughly absolute maximum fclk= 62.5 MHz
+    spi_config.clk_div = SPI_40MHz_DIV;
+    // 80MHz is too fast according to datasheet
+    // Before we didn't have CONFIG_ESP8266_HSPI_HIGH_THROUGHPUT=y so we didn't run into this issue
+    // spi_config.clk_div = SPI_80MHz_DIV;
+    spi_config.interface.cpol = 0; // Figure 5 for SCL: clock is low at idle
+    spi_config.interface.cpha = 0; // Figure 5 for SDA,DC/X -> DOUT: data rising edge and shifted on the second edge
+
     // Register SPI event callback function
     spi_config.event_cb = NULL;
     ESP_ERROR_CHECK(spi_init(HSPI_HOST, &spi_config));
@@ -162,7 +177,7 @@ static void write_data_byte(uint8_t data) {
     chip_select(false);
 }
 
-static void write_pixel(rgb565_t pixel) {
+static void IRAM_ATTR write_pixel(rgb565_t pixel) {
     // Assume already set data/command and chip_select pins
     // set_mode(Mode::DATA);
     // chip_select(true);
@@ -286,17 +301,19 @@ void tft::hardware_reset() {
     vTaskDelay(50/portTICK_RATE_MS);
 }
 
-void tft::begin_write_pixel() {
+void IRAM_ATTR tft::begin_write_pixel() {
+    taskENTER_CRITICAL();
     spi::write_command_byte(CMD.MEMORY_WRITE);
     spi::set_mode(spi::Mode::DATA);
     spi::chip_select(true);
 }
 
-void tft::end_write_pixel() {
+void IRAM_ATTR tft::end_write_pixel() {
     spi::chip_select(false);
+    taskEXIT_CRITICAL();
 }
 
-void tft::write_pixel(rgb565_t colour) {
+void IRAM_ATTR tft::write_pixel(rgb565_t colour) {
     spi::write_pixel(colour);
 }
 
