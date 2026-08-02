@@ -73,6 +73,14 @@ class CustomResponseHandler(ResponseHandler):
         else:
             logger.warning(f"Got dht11 error_code={dht11.error_code}")
 
+    @override
+    async def get_uptime(self, millis):
+        seconds, millis = divmod(millis, 1000)
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        days, hours = divmod(hours, 24)
+        logger.info(f"Uptime: {days}d {hours}h {minutes}m {seconds}s")
+
 def get_openmeteo_url(latitude, longitude):
     assert isinstance(latitude, float)
     assert isinstance(longitude, float)
@@ -260,6 +268,7 @@ class Server:
         now = datetime.now()
         time_24_hour = now.hour*100 + now.minute
         await self.command_sender.set_24_hour_time(time_24_hour, False, True)
+        await self.command_sender.get_uptime()
 
     @graceful_fail
     @wait_render_fence

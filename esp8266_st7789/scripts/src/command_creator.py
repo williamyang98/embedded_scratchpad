@@ -2,9 +2,8 @@ from enum import IntEnum
 import functools
 import inspect
 
-# transmitter for components/st7789/app/commands.hpp
-# websocket_on_binary_frame @ main/websocket_handler.cpp
 class CommandHeader(IntEnum):
+    # CommandHeader @ components/st7789/app/response.hpp
     TRIGGER_RENDER = 0x00
     # weather page
     SET_TEMPERATURE = 0x01
@@ -19,8 +18,9 @@ class CommandHeader(IntEnum):
     # set page
     SET_SCREEN_BRIGHTNESS = 0xFE
     SET_PAGE = 0xFF
-    # non st7789 commands
+    # ExtraHeaders @ main/websocket_handler.cpp
     GET_DHT11 = 0xA0
+    GET_UPTIME = 0xA1
 
 # ../src/app/weather_icons.hpp
 class WeatherIcon(IntEnum):
@@ -151,6 +151,11 @@ class CommandCreator:
     def get_dht11(self):
         return bytearray([
             int(CommandHeader.GET_DHT11),
+        ])
+
+    def get_uptime(self):
+        return bytearray([
+            int(CommandHeader.GET_UPTIME),
         ])
 
 def create_command_sender(cls):

@@ -55,3 +55,21 @@ Refer to ```./scripts/README.md``` for setup instructions.
 | 6 | DC (data/command mode) |
 | 7 | CS (chip select) |
 | 8 | BLK (backlight) |
+
+## Device communication schema
+- Device has rx/tx binary packet schema defined in c++
+- Client libraries are written in python and javascript
+
+### Client to device
+| Type | Filepath | Description |
+| --- | --- | --- |
+| c++ device | components/st7789/app/commands.hpp | CommandHeader, CommandParser |
+| javascript client | static/web_socket.js | ResponseHeader, parse_websocket_response |
+| python client | scripts/src/command_creator.py | CommandHeader, CommandCreator  |
+
+### Device to client
+| Type | Filepath | Description |
+| --- | --- | --- |
+| c++ device | components/st7789/app/response.hpp | ResponseHeader, ResponseSender |
+| javascript client | static/web_socket.js | ResponseHeader, parse_websocket_response |
+| python client | scripts/src/response_parser.py | ResponseHeader, ResponseParser |

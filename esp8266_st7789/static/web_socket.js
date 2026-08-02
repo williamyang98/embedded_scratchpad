@@ -3,10 +3,8 @@ import { DebugFrame } from "./debug_frame.js";
 // main/main.cpp in g_websocket.uri
 export const DEFAULT_WEBSOCKET_URL = `ws://${document.location.host}/api/v1/websocket`;
 
-// javascript port of scripts/src/command_creator.py
-// transmitter for components/st7789/app/commands.hpp
-// websocket_on_binary_frame @ main/websocket_handler.cpp
 export const CommandHeader = {
+  // CommandHeader @ components/st7789/app/commands.hpp
   TRIGGER_RENDER: 0x00,
   // weather page
   SET_TEMPERATURE: 0x01,
@@ -21,8 +19,9 @@ export const CommandHeader = {
   // set page
   SET_SCREEN_BRIGHTNESS: 0xFE,
   SET_PAGE: 0xFF,
-  // non-st7789 commands
+  // ExtraHeaders @ main/websocket_handler.cpp
   GET_DHT11: 0xA0,
+  GET_UPTIME: 0xA1,
 };
 
 export const WeatherIcon = {
@@ -138,19 +137,21 @@ export class CommandCreator {
   get_dht11() {
     return new Uint8Array([CommandHeader.GET_DHT11]);
   }
+  get_uptime() {
+    return new Uint8Array([CommandHeader.GET_UPTIME]);
+  }
 }
 
-// javascript port of scripts/src/response_parser.py
-// receiver for components/st7789/app/response.hpp
-// websocket_on_binary_frame @ main/websocket_handler.cpp
 export const ResponseHeader = {
+  // ResponseHeader @ components/st7789/app/response.hpp
   ACKNOWLEDGE_COMMAND: 0x00,
   RENDER_STATUS: 0x01,
   LOG_MESSAGE: 0x02,
   DEBUG_MESSAGE: 0x03,
   DEBUG_FRAME: 0x04,
-  // non-st7789 responses
+  // ExtraHeaders @ main/websocket_handler.cpp
   GET_DHT11: 0xA0,
+  GET_UPTIME: 0xA1,
 };
 
 export class MinimumLengthError extends Error {
@@ -267,6 +268,16 @@ export function parse_websocket_response(data) {
     } else {
       throw new Error(`Unhandled dht11 response with header=${header}, length=${data.length}`);
     }
+  }
+  if (header === ResponseHeader.GET_UPTIME) {
+    const EXPECTED_LENGTH = 5;
+    if (data.length !== EXPECTED_LENGTH) {
+      throw new ExactLengthError(header, EXPECTED_LENGTH, data.length);
+    }
+    const view = new DataView(data.buffer);
+    const is_little_endian = true;
+    const timestamp_ms = view.getUint32(1, is_little_endian);
+    return { type: "uptime", timestamp_ms };
   }
   throw new UnhandledResponse(header, data);
 }

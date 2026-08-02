@@ -12,12 +12,15 @@ extern "C" {
 
 static const char TAG[] = "websocket-handler";
 // Refer to CommandHeader in components/st7789/app/commands.hpp to determine what headers are already taken
-static const uint8_t DHT11_CMD = 0xA0;
+enum class ExtraHeaders: uint8_t {
+    GET_DHT11 = 0xA0,
+    GET_UPTIME = 0xA1,
+};
 
 static struct WebsocketClient* dht11_websocket_client = NULL;
 
 static void websocket_async_send_dht11(struct WebsocketClient* client, void *args) {
-    static const char SUBTAG[] = "dht11-async-websocket-handler";
+    static const char SUBTAG[] = "websocket-async-handler-dht11";
     assert(client != NULL);
     const struct Websocket* websocket = client->websocket;
     assert(websocket != NULL);
@@ -25,7 +28,7 @@ static void websocket_async_send_dht11(struct WebsocketClient* client, void *arg
     assert(buffer != NULL);
 
     size_t length = 0;
-    buffer[0] = DHT11_CMD;
+    buffer[0] = static_cast<uint8_t>(ExtraHeaders::GET_DHT11);
     struct DHT11::Measurement measurement;
     const DHT11::ReadStatus read_status = g_dht11.read(measurement);
     if (read_status == DHT11::ReadStatus::OK) {
@@ -45,7 +48,7 @@ static void websocket_async_send_dht11(struct WebsocketClient* client, void *arg
 }
 
 static void websocket_on_dht11_frame(httpd_req_t* request, struct WebsocketClient* client, const uint8_t* data, size_t size) {
-    static const char SUBTAG[] = "dht11-websocket-handler";
+    static const char SUBTAG[] = "websocket-handler-dht11";
     assert(request != NULL);
     assert(client != NULL);
     dht11_websocket_client = client;
@@ -56,8 +59,33 @@ static void websocket_on_dht11_frame(httpd_req_t* request, struct WebsocketClien
     }
 }
 
+static void websocket_on_uptime(httpd_req_t* request, struct WebsocketClient* client, const uint8_t* data, size_t size) {
+    static const char SUBTAG[] = "websocket-handler-uptime";
+    assert(request != NULL);
+    assert(client != NULL);
+    const struct Websocket* websocket = client->websocket;
+    assert(websocket != NULL);
+    uint8_t* buffer = websocket->transmit_buffer;
+    assert(buffer != NULL);
+
+    const size_t length = 5;
+    assert(websocket->transmit_buffer_size >= length);
+
+    const uint32_t timestamp = esp_log_early_timestamp();
+    buffer[0] = static_cast<uint8_t>(ExtraHeaders::GET_UPTIME);
+    buffer[1] =  timestamp        & 0xFF;
+    buffer[2] = (timestamp >>  8) & 0xFF;
+    buffer[3] = (timestamp >> 16) & 0xFF;
+    buffer[4] = (timestamp >> 24) & 0xFF;
+
+    const esp_err_t status = websocket_send_pending_binary_data_sync(client, request, length);
+    if (status != ESP_OK) {
+        ESP_LOGE(SUBTAG, "failed to send esp uptime: '%s'", esp_err_to_name(status));
+    }
+}
+
 static void websocket_async_send_app_response(struct WebsocketClient* client, void* _app_response) {
-    static const char SUBTAG[] = "response-output-async-websocket-handler";
+    static const char SUBTAG[] = "websocket-async-handler-response-output";
     assert(client != NULL);
     const struct Websocket* websocket = client->websocket;
     assert(websocket != NULL);
@@ -103,11 +131,13 @@ static void on_app_response_callback(const uint8_t* buffer, size_t size, void* _
 static void websocket_on_open(httpd_req_t* request, struct WebsocketClient* client) {
     g_response_output.attach_callback(on_app_response_callback, (void*)client);
     const size_t total_clients = websocket_count_total_clients(client->websocket);
-    g_green_led.set_duty_cycle(GLOBAL_PWM_PERIOD_US/128); // make this dim to be less annoying
+    if (total_clients > 0) {
+        g_green_led.set_duty_cycle(GLOBAL_PWM_PERIOD_US/128); // make this dim to be less annoying
+    }
 }
 
 static void websocket_on_binary_frame(httpd_req_t* request, struct WebsocketClient* client, const uint8_t* data, size_t size) {
-    static const char SUBTAG[] = "binary-frame-dispatcher-websocket-handler";
+    static const char SUBTAG[] = "websocket-handler-binary-frame-dispatcher-";
     assert(client != NULL);
     assert(data != NULL);
 
@@ -121,7 +151,8 @@ static void websocket_on_binary_frame(httpd_req_t* request, struct WebsocketClie
     int cmd_length = size-1;
 
     switch (cmd_code) {
-    case DHT11_CMD: return websocket_on_dht11_frame(request, client, cmd_data, cmd_length);
+    case static_cast<uint8_t>(ExtraHeaders::GET_DHT11): return websocket_on_dht11_frame(request, client, cmd_data, cmd_length);
+    case static_cast<uint8_t>(ExtraHeaders::GET_UPTIME): return websocket_on_uptime(request, client, cmd_data, cmd_length);
     default: g_command_parser.parse_command(data, size); // redirect to app command handler
     }
 }

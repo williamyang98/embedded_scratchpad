@@ -8,6 +8,7 @@ import {
   CommandCreator,
   DEFAULT_WEBSOCKET_URL,
 } from "./web_socket.js";
+import { milliseconds_to_dhms } from "./utility.js";
 
 const frame_elem = useTemplateRef("frame");
 const controls_elem = useTemplateRef("controls");
@@ -35,6 +36,7 @@ const dht11 = ref({
   humidity: null,
   error_code: null,
 });
+const device_uptime = ref(null);
 
 function count_acknowledged_command(header, is_success) {
   let counter = acknowledged_commands.value[header];
@@ -74,6 +76,8 @@ function handle_response(response) {
     } else {
       dht11.value.error_code = response.error_code;
     }
+  } else if (response.type === "uptime") {
+    device_uptime.value = response.timestamp_ms;
   } else {
     console.log(response);
   }
@@ -143,11 +147,48 @@ function refresh_dht11() {
   on_command(command_creator.get_dht11());
 }
 
+function refresh_uptime() {
+  on_command(command_creator.get_uptime());
+}
+
+const background_task_uptime_interval_id = ref(null);
+
+function stop_background_task_uptime() {
+  if (background_task_uptime_interval_id.value !== null) {
+    clearInterval(background_task_uptime_interval_id.value);
+    background_task_uptime_interval_id.value = null;
+  }
+}
+
+function start_background_task_uptime() {
+  stop_background_task_uptime();
+  background_task_uptime_interval_id.value = setInterval(() => {
+    refresh_uptime();
+  }, 60000);
+}
+
+function format_uptime(milliseconds) {
+  const dhms = milliseconds_to_dhms(milliseconds);
+  let text = "";
+  if (text.length > 0 || dhms.days > 0) text += `${dhms.days}d`;
+  if (text.length > 0 || dhms.hours > 0) text += ` ${dhms.hours}h`;
+  if (text.length > 0 || dhms.minutes > 0) text += ` ${dhms.minutes}m`;
+  text += ` ${dhms.seconds}s`;
+  // text += ` ${dhms.milliseconds}ms`;
+  return text;
+}
+
 watch(websocket_state, (websocket_state) => {
-  if (websocket_state !== WebSocket.OPEN) return;
-  if (controls_elem.value === null) return;
-  controls_elem.value.submit();
-  refresh_dht11();
+  if (websocket_state === WebSocket.OPEN) {
+    if (controls_elem.value !== null) {
+      controls_elem.value.submit();
+    }
+    refresh_dht11();
+    refresh_uptime();
+    start_background_task_uptime();
+  } else if (websocket_state === WebSocket.CLOSED) {
+    stop_background_task_uptime();
+  }
 });
 
 </script>
@@ -180,11 +221,31 @@ watch(websocket_state, (websocket_state) => {
       </tbody>
     </table>
     <br>
+    <span><b>Device Status</b></span>
+    <table>
+      <colgroup>
+        <col style="width: 30%;">
+        <col style="width: 50%;">
+        <col style="width: 20%;">
+      </colgroup>
+      <tbody>
+        <tr>
+          <td><b>Rendering</b></td>
+          <td>{{ is_render_busy }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><b>Uptime</b></td>
+          <td>{{ device_uptime === null ? '?' : format_uptime(device_uptime) }}</td>
+          <td><button @click="refresh_uptime" :disabled="!can_send_commands">Refresh</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <br>
     <div>
       <span style="margin-right: 1rem"><b>Acknowledged commands</b></span>
       <button @click="clear_acknowledged_commands">Clear</button>
     </div>
-    <span>Is render busy: {{ is_render_busy }}</span>
     <table>
       <thead>
         <tr><th>Header</th><th>Successes</th><th>Fails</th></tr>

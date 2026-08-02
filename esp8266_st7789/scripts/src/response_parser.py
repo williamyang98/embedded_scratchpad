@@ -6,15 +6,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# python receiver counterpart to ResponseHeader and ResponseSender in ../src/response.hpp
 class ResponseHeader:
+    # ResponseHeader @ components/st7789/app/response.hpp
     ACKNOWLEDGE_COMMAND = 0x00
     RENDER_STATUS = 0x01
     LOG_MESSAGE = 0x02
     DEBUG_MESSAGE = 0x03
     DEBUG_FRAME = 0x04
-    # non-st7789 responses
+    # ExtraHeaders @ main/websocket_handler.cpp
     GET_DHT11 = 0xA0
+    GET_UPTIME = 0xA1
 
 class EmptyDecodedResponse(Exception):
     pass
@@ -95,6 +96,10 @@ class ResponseHandler(ABC):
     async def get_dht11(self, dht11: DHT11Response):
         pass
 
+    @abstractmethod
+    async def get_uptime(self, timestamp_ms: int):
+        pass
+
 class ResponseParser:
     def __init__(self, handler: ResponseHandler):
         self.handler = handler
@@ -149,6 +154,10 @@ class ResponseParser:
                 await self.handler.get_dht11(dht11)
             else:
                 raise Exception(f"Unhandled dht11 response with header={header:02X}, length={len(data)}")
+        elif header == ResponseHeader.GET_UPTIME:
+            assert_exact_length(5)
+            timestamp_ms = data[1] | (data[2] << 8) | (data[3] << 16) | (data[4] << 24)
+            await self.handler.get_uptime(timestamp_ms)
         else:
             raise UnhandledResponse(header, data)
 
