@@ -7,4 +7,5 @@ idf_component_register(
     SRCS ${SRC_FILES}
     INCLUDE_DIRS ${SRC_DIR}
     PRIV_INCLUDE_DIRS ${SRC_DIR}
+    PRIV_REQUIRES global_pwm
 )

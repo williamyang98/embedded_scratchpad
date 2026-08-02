@@ -1,5 +1,6 @@
 extern "C" {
 #include "dht11.h"
+#include "global_pwm.h"
 }
 
 #include "websocket_handler.hpp"
@@ -101,6 +102,8 @@ static void on_app_response_callback(const uint8_t* buffer, size_t size, void* _
 
 static void websocket_on_open(httpd_req_t* request, struct WebsocketClient* client) {
     g_response_output.attach_callback(on_app_response_callback, (void*)client);
+    const size_t total_clients = websocket_count_total_clients(client->websocket);
+    g_green_led.set_duty_cycle(GLOBAL_PWM_PERIOD_US/128); // make this dim to be less annoying
 }
 
 static void websocket_on_binary_frame(httpd_req_t* request, struct WebsocketClient* client, const uint8_t* data, size_t size) {
@@ -126,6 +129,10 @@ static void websocket_on_binary_frame(httpd_req_t* request, struct WebsocketClie
 // client will be freed after this call
 static void websocket_on_close(httpd_req_t* request, struct WebsocketClient* client) {
     g_response_output.remove_callback(on_app_response_callback, (void*)client);
+    const size_t total_clients = websocket_count_total_clients(client->websocket);
+    if (total_clients == 0) {
+        g_green_led.set_duty_cycle(0);
+    }
 }
 
 void websocket_attach_handlers(struct Websocket* websocket) {

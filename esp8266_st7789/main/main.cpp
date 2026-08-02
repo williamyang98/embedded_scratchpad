@@ -22,12 +22,15 @@ extern "C" {
 #include "webserver.h"
 #include "websocket.h"
 #include "wifi_sta.h"
+#include "global_pwm.h"
 }
 
 #include "hardware/tft.hpp"
 #include "graphics/render_glyphs.hpp"
 #include "global_periphs.hpp"
 #include "websocket_handler.hpp"
+#include "extra_button.hpp"
+#include "extra_led.hpp"
 
 const char INIT_TAG[] = "main-init";
 
@@ -53,9 +56,22 @@ ResponseOutput g_response_output; // extern;
 ResponseSender g_response_sender(g_response_output); // extern
 App g_app(g_response_sender); // extern
 CommandParser g_command_parser(g_response_sender, g_app); // extern
+ExtraButton g_flash_button { // extern
+    .pin = GPIO_NUM_0,
+    .pin_func = FUNC_GPIO0,
+    .label = "extra-flash-button",
+};
+ExtraLed g_green_led { // extern
+    .pin = GPIO_NUM_9,
+    .label = "extra-green-led",
+};
 
 static esp_err_t init_nvs(void);
 static esp_err_t init_server(void);
+
+static void on_flash_button_press(bool is_pressed, void* args) {
+    ESP_LOGI(INIT_TAG, "flash-button pressed=%u", is_pressed);
+}
 
 extern "C" void app_main(void) {
     ESP_LOGI(INIT_TAG, "entering main function!");
@@ -68,7 +84,25 @@ extern "C" void app_main(void) {
         ESP_LOGE(INIT_TAG, "failed to initialise dht11 sensor on pin: %u", g_dht11_data_pin);
     }
 
-    tft::init();
+    tft::init(); // backlight led
+    g_green_led.init();
+    ESP_ERROR_CHECK(global_pwm_init());
+    {
+        const uint8_t total_pwm_pins = global_pwm_get_total_pins();
+        const uint32_t* pwm_pins = global_pwm_get_pins();
+        ESP_LOGI(INIT_TAG, "initialised global pwm for %u pins", total_pwm_pins);
+        for (uint8_t i = 0; i < total_pwm_pins; i++) {
+            ESP_LOGI(INIT_TAG, "- pwm_channel=%u, pwm_pin=%u", i, pwm_pins[i]);
+        }
+    }
+
+    {
+        const int _no_use = 0;
+        gpio_install_isr_service(_no_use);
+    }
+    g_flash_button.init();
+    g_flash_button.attach_callback(on_flash_button_press, NULL, true);
+
     init_nvs();
     wifi_init_sta();
     init_server();
@@ -80,7 +114,7 @@ extern "C" void app_main(void) {
 
     ESP_LOGI(INIT_TAG, "finished initialisation");
     tft::set_brightness(50);
-    tft::set_write_mode(false, false);
+    tft::set_write_mode(true, true); // flip upside down
     g_glyph_rgba_q256_palette_render_settings.x_mirror = false;
     g_glyph_rgba_q256_palette_render_settings.y_mirror = false;
     g_app.render_all();

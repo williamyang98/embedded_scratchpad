@@ -8,6 +8,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+extern "C" {
+#include "global_pwm.h"
+}
+
 // Section 9.1: System function command table 1
 static constexpr struct {
     uint8_t NO_OPERATION = 0x00;
@@ -69,6 +73,8 @@ static constexpr struct {
     gpio_num_t MOSI = GPIO_NUM_13; // spi tft as slave in
     gpio_num_t SCLK = GPIO_NUM_14; // spi clock
 } PIN;
+
+static uint8_t BACKLIGHT_PWM_CHANNEL = 0;
 
 namespace spi {
 
@@ -218,11 +224,6 @@ void tft::set_write_rect(uint16_t x_start, uint16_t x_end, uint16_t y_start, uin
   cmd_set_row_address(y_start, y_end);
 }
 
-static constexpr uint32_t BACKLIGHT_PWM_PERIOD_US = 1024;
-static uint32_t BACKLIGHT_PWM_DUTY_CYCLE = 0;
-static float BACKLIGHT_PWM_PHASE = 0.0f;
-static const uint32_t BACKLIGHT_PWM_PIN_NUMBER = PIN.BACKLIGHT;
-
 void tft::init() {
     // default pin setup
     ESP_ERROR_CHECK(gpio_set_direction(PIN.CHIP_SELECT, GPIO_MODE_OUTPUT));
@@ -233,9 +234,7 @@ void tft::init() {
     ESP_ERROR_CHECK(gpio_set_direction(PIN.SCLK, GPIO_MODE_OUTPUT));
 
     // backlight pwm
-    ESP_ERROR_CHECK(pwm_init(BACKLIGHT_PWM_PERIOD_US, &BACKLIGHT_PWM_DUTY_CYCLE, 1, &BACKLIGHT_PWM_PIN_NUMBER));
-    ESP_ERROR_CHECK(pwm_set_phases(&BACKLIGHT_PWM_PHASE));
-    ESP_ERROR_CHECK(pwm_start());
+    ESP_ERROR_CHECK(global_pwm_add_channel(PIN.BACKLIGHT, &BACKLIGHT_PWM_CHANNEL));
 
     // reset default level
     ESP_ERROR_CHECK(gpio_set_level(PIN.RESET, 1));
@@ -245,7 +244,7 @@ void tft::init() {
 
     // default state
     tft::hardware_reset();
-    tft::set_brightness(0);
+    // tft::set_brightness(0);
 
     // init commands
     spi::write_command_byte(CMD.SOFTWARE_RESET);
@@ -274,9 +273,9 @@ void tft::init() {
 }
 
 void tft::set_brightness(uint8_t brightness) {
-    constexpr uint32_t SCALE = BACKLIGHT_PWM_PERIOD_US/256;
+    constexpr uint32_t SCALE = GLOBAL_PWM_PERIOD_US/256;
     const uint32_t duty_cycle = uint32_t(brightness)*SCALE;
-    ESP_ERROR_CHECK(pwm_set_duty(0, duty_cycle));
+    ESP_ERROR_CHECK(pwm_set_duty(BACKLIGHT_PWM_CHANNEL, duty_cycle));
     ESP_ERROR_CHECK(pwm_start());
 }
 
