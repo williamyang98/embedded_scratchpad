@@ -14,14 +14,16 @@
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
+    Async,
     clock::CpuClock,
-    time::Duration as EspDuration,
+    time::{Duration as EspDuration, Instant},
     timer::timg::{TimerGroup, MwdtStage, Wdt},
     interrupt::software::SoftwareInterruptControl,
     system::Stack,
     rng::Rng,
     gpio::{Output, Level, OutputConfig},
-    peripherals::{TIMG0, TIMG1}
+    peripherals::{TIMG0, TIMG1},
+    spi::master::{Spi, Config as SpiMasterConfig},
 };
 // rtos
 use esp_rtos::embassy::Executor;
@@ -148,10 +150,16 @@ async fn main_core_0(spawner: Spawner) -> ! {
     let mut led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
     led.set_low();
     // led.set_high();
-
     let led_controller = LedController::new(peripherals.LEDC, led);
-
     let app = Arc::new(App::new(led_controller));
+
+    let spi = Spi::new(peripherals.SPI2, SpiMasterConfig::default())
+        .expect("Failed to initialise SPI2")
+        .with_sck(peripherals.GPIO18)
+        .with_miso(peripherals.GPIO19)
+        .with_mosi(peripherals.GPIO23)
+        .with_cs(peripherals.GPIO5)
+        .into_async();
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
     let core_1_stack = CORE_1_STACK.init(Box::new(Stack::new()));
@@ -180,6 +188,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
     spawner.spawn(send_messages_task(messages_channel).unwrap());
     spawner.spawn(run_network_stack_task(net_runner).unwrap());
     spawner.spawn(run_wifi_station_task(wifi_controller).unwrap());
+    spawner.spawn(run_led_spi_write_task(spi).unwrap());
     spawner.spawn(watchdog_timer_core_0_task(timer_group_0.wdt).unwrap());
     log::info!("core 0 running all tasks");
 
@@ -259,12 +268,39 @@ async fn send_messages_task(messages_channel: &'static MessageChannel) -> ! {
     }
 }
 
+struct Dhms(pub EspDuration);
+
+impl core::fmt::Display for Dhms {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let total_seconds = self.0.as_secs();
+        let seconds = total_seconds % 60;
+        let minutes = (total_seconds / 60) % 60;
+        let hours = (total_seconds / 3600) % 24;
+        let days = total_seconds / 86400;
+        let mut has_digit = false;
+        if days > 0 {
+            has_digit = true;
+            write!(f, "{days}d")?;
+        }
+        if hours > 0 || has_digit {
+            has_digit = true;
+            write!(f, "{hours}h")?;
+        }
+        if minutes > 0 || has_digit {
+            write!(f, "{minutes}m")?;
+        }
+        write!(f, "{seconds}s")
+    }
+}
+
 #[embassy_executor::task]
 async fn print_heap_stats() -> ! {
     const POLL_PERIOD: Duration = Duration::from_secs(60);
     loop {
         let stats = esp_alloc::HEAP.stats();
         log::info!("Heap stats\n{stats}");
+        let uptime = Instant::now();
+        log::info!("Uptime is {}", Dhms(uptime.duration_since_epoch()));
         Timer::after(POLL_PERIOD).await;
     }
 }
@@ -312,3 +348,16 @@ pub async fn run_server_task(id: String, router: &'static AppRouter<WebServer>, 
     run_server(&id, router, config, net_stack).await
 }
 
+#[embassy_executor::task]
+pub async fn run_led_spi_write_task(mut spi: Spi<'static, Async>) -> ! {
+    const BLINK_PERIOD: Duration = Duration::from_millis(100);
+    let mut counter: u8 = 0;
+    loop {
+        let mut data: [u8; 1] = [counter];
+        if let Err(err) = spi.transfer(&mut data) {
+            log::error!("Failed to perform spi transfer: {err:?}");
+        };
+        counter = counter.wrapping_add(1);
+        Timer::after(BLINK_PERIOD).await;
+    }
+}

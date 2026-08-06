@@ -1,3 +1,4 @@
+use esp_hal::time::Instant;
 use embassy_sync::pubsub::WaitResult;
 use picoserve::{
     response::ws,
@@ -24,6 +25,7 @@ enum CommandHeader {
     SetLedDutyCycle = 0x00,
     GetLedDutyCycle = 0x01,
     Ping = 0x02,
+    GetUptime = 0x03,
 }
 
 #[repr(u8)]
@@ -34,6 +36,7 @@ enum ResponseHeader {
     GetLedDutyCycle = 0x02,
     BackgroundTaskMessage = 0x03,
     Pong = 0x04,
+    GetUptime = 0x05,
     // errors
     EmptyCommand = 0xFC,
     BadCommandLength = 0xFD,
@@ -102,6 +105,17 @@ async fn handle_binary_message(app: &App, message: &[u8]) -> BinaryMessageRespon
             let mut response = vec![0u8; 5];
             response[0] = ResponseHeader::Pong as u8;
             response[1..5].copy_from_slice(&message[1..5]);
+            response.into()
+        },
+        CommandHeader::GetUptime => {
+            const EXPECTED_LENGTH: usize = 1;
+            if message.len() != EXPECTED_LENGTH {
+                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH, message.len());
+            }
+            let mut response = vec![0u8; 9];
+            response[0] = ResponseHeader::GetUptime as u8;
+            let uptime_micros: u64 = Instant::now().duration_since_epoch().as_micros();
+            response[1..9].copy_from_slice(&uptime_micros.to_le_bytes());
             response.into()
         },
     }

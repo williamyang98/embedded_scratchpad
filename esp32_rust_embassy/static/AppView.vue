@@ -2,7 +2,7 @@
 import { ref, useTemplateRef, computed, watch, onMounted } from "vue";
 import { WEBSOCKET_URL, get_bluetooth_devices, get_heap_stats } from "./api.js";
 import { parse_websocket_response, WebsocketCommandCreator } from "./web_socket.js";
-import { format_bluetooth_address, format_object_to_string, debounce_timeout, random_u32 } from "./utility.js";
+import { format_bluetooth_address, format_object_to_string, debounce_timeout, random_u32, seconds_to_dhms } from "./utility.js";
 
 const websocket = ref(null);
 const websocket_state = ref(WebSocket.CLOSED);
@@ -20,6 +20,7 @@ const led_duty_cycle = ref(0);
 const background_task_message = ref(null);
 const ping_value = ref(null);
 const pong_value = ref(null);
+const uptime_seconds = ref(null);
 const is_connection_synchronised = computed(() => ping_value.value === pong_value.value);
 
 const responses = ref([]);
@@ -123,6 +124,10 @@ function handle_websocket_response(data) {
       background_task_message.value = res.message;
     } else if (res.type === "pong") {
       pong_value.value = res.value;
+    } else if (res.type === "uptime") {
+      const microseconds_per_second = BigInt(1000000);
+      const seconds = Number(res.total_microseconds/microseconds_per_second); // cannot mix Number and BigInt types
+      uptime_seconds.value = seconds;
     } else {
       console.log(res);
     }
@@ -143,6 +148,17 @@ function send_ping() {
   let value = random_u32();
   ping_value.value = value;
   websocket.value.send(c.send_ping(value));
+  websocket.value.send(c.get_uptime());
+}
+
+function format_uptime(seconds) {
+  const dhms = seconds_to_dhms(seconds);
+  let text = "";
+  if (text.length > 0 || dhms.days > 0) text += `${dhms.days}d`;
+  if (text.length > 0 || dhms.hours > 0) text += ` ${dhms.hours}h`;
+  if (text.length > 0 || dhms.minutes > 0) text += ` ${dhms.minutes}m`;
+  text += ` ${dhms.seconds}s`;
+  return text;
 }
 
 onMounted(() => {
@@ -236,6 +252,10 @@ watch(led_duty_cycle, (led_duty_cycle) => {
     <tr>
       <td>Connection synchronised</td>
       <td>{{ is_connection_synchronised }}</td>
+    </tr>
+    <tr>
+      <td>Uptime</td>
+      <td>{{ uptime_seconds === null ? "?" : format_uptime(uptime_seconds) }}</td>
     </tr>
     <tr>
       <td>Auto connect attempts</td>

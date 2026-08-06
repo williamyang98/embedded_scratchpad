@@ -3,6 +3,7 @@ export const CommandHeader = {
   SetLedDutyCycle: 0x00,
   GetLedDutyCycle: 0x01,
   Ping: 0x02,
+  GetUptime: 0x03,
 };
 
 export class WebsocketCommandCreator {
@@ -21,6 +22,9 @@ export class WebsocketCommandCreator {
     view.setUint32(value_offset, value, IS_LITTLE_ENDIAN);
     return command;
   }
+  get_uptime() {
+    return new Uint8Array([CommandHeader.GetUptime]);
+  }
 }
 
 export const ResponseHeader = {
@@ -29,6 +33,7 @@ export const ResponseHeader = {
   GetLedDutyCycle: 0x02,
   BackgroundTaskMessage: 0x03,
   Pong: 0x04,
+  GetUptime: 0x05,
   // errors
   EmptyCommand: 0xFC,
   BadCommandLength: 0xFD,
@@ -106,6 +111,15 @@ export function parse_websocket_response(data) {
     let value_offset = 1;
     let value = view.getUint32(value_offset, IS_LITTLE_ENDIAN);
     return { type: "pong", value };
+  }
+  if (header === ResponseHeader.GetUptime) {
+    const EXPECTED_LENGTH = 9;
+    if (data.length !== EXPECTED_LENGTH) throw BadLengthError(header, EXPECTED_LENGTH, data.length);
+    let view = new DataView(data.buffer);
+    const IS_LITTLE_ENDIAN = true;
+    let value_offset = 1;
+    let total_microseconds = view.getBigUint64(value_offset, IS_LITTLE_ENDIAN);
+    return { type: "uptime", total_microseconds };
   }
   if (header === ResponseHeader.EmptyCommand) throw ServerError(header, data);
   if (header === ResponseHeader.BadCommandLength) throw ServerError(header, data);
