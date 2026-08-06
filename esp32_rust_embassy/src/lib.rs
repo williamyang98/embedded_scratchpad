@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(impl_trait_in_assoc_type)] // for picoserve AppBuilder trait
+#![recursion_limit = "256"]
 pub mod ble_scanner;
 pub mod web_server;
 pub mod web_socket;

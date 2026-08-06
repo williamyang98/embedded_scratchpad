@@ -1571,13 +1571,14 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 [[package]]
 name = "picoserve"
 version = "0.19.0"
-source = "git+https://github.com/sammhicks/picoserve.git?rev=refs%2Fpull%2F115%2Fhead#47be0229d28d0d6ea14e16461cdccaaa436a887f"
+source = "git+https://github.com/sammhicks/picoserve.git?rev=45c0f80b3f2381f32a6b484677c887b78739b8b2#45c0f80b3f2381f32a6b484677c887b78739b8b2"
 dependencies = [
  "const-sha1",
  "data-encoding",
  "embassy-net",
  "embassy-time",
  "embedded-io-async 0.7.0",
+ "futures-util",
  "heapless 0.8.0",
  "lhash",
  "log",
@@ -1592,7 +1593,7 @@ dependencies = [
 [[package]]
 name = "picoserve_derive"
 version = "0.1.4"
-source = "git+https://github.com/sammhicks/picoserve.git?rev=refs%2Fpull%2F115%2Fhead#47be0229d28d0d6ea14e16461cdccaaa436a887f"
+source = "git+https://github.com/sammhicks/picoserve.git?rev=45c0f80b3f2381f32a6b484677c887b78739b8b2#45c0f80b3f2381f32a6b484677c887b78739b8b2"
 dependencies = [
  "proc-macro2",
  "quote",

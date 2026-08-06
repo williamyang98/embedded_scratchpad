@@ -82,7 +82,8 @@ smoltcp = { version = "0.13.1", default-features = false, features = [
 ] }
 picoserve = {
   git = "https://github.com/sammhicks/picoserve.git",
-  rev = "refs/pull/115/head",
+  # rev = "refs/pull/115/head",
+  rev = "45c0f80b3f2381f32a6b484677c887b78739b8b2",
   features = [
     "log",
     "alloc",
