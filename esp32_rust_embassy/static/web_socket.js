@@ -4,6 +4,7 @@ export const CommandHeader = {
   GetLedDutyCycle: 0x01,
   Ping: 0x02,
   GetUptime: 0x03,
+  GetAppInstanceId: 0x04,
 };
 
 export class WebsocketCommandCreator {
@@ -25,6 +26,9 @@ export class WebsocketCommandCreator {
   get_uptime() {
     return new Uint8Array([CommandHeader.GetUptime]);
   }
+  get_app_instance_id() {
+    return new Uint8Array([CommandHeader.GetAppInstanceId]);
+  }
 }
 
 export const ResponseHeader = {
@@ -34,6 +38,7 @@ export const ResponseHeader = {
   BackgroundTaskMessage: 0x03,
   Pong: 0x04,
   GetUptime: 0x05,
+  GetAppInstanceId: 0x06,
   // errors
   EmptyCommand: 0xFC,
   BadCommandLength: 0xFD,
@@ -120,6 +125,15 @@ export function parse_websocket_response(data) {
     let value_offset = 1;
     let total_microseconds = view.getBigUint64(value_offset, IS_LITTLE_ENDIAN);
     return { type: "uptime", total_microseconds };
+  }
+  if (header === ResponseHeader.GetAppInstanceId) {
+    const EXPECTED_LENGTH = 5;
+    if (data.length !== EXPECTED_LENGTH) throw BadLengthError(header, EXPECTED_LENGTH, data.length);
+    let view = new DataView(data.buffer);
+    const IS_LITTLE_ENDIAN = true;
+    let value_offset = 1;
+    let id = view.getUint32(value_offset, IS_LITTLE_ENDIAN);
+    return { type: "app_instance_id", id };
   }
   if (header === ResponseHeader.EmptyCommand) throw ServerError(header, data);
   if (header === ResponseHeader.BadCommandLength) throw ServerError(header, data);

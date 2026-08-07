@@ -1,3 +1,4 @@
+use esp_hal::rng::Rng;
 use embassy_sync::{
     mutex::Mutex,
     blocking_mutex::raw::CriticalSectionRawMutex,
@@ -43,6 +44,7 @@ pub struct App {
     // critical_mutex.lock_mut is not inherently safe which is why we use a RefCell as well
     bluetooth_devices: Arc<Mutex<CriticalSectionRawMutex, BluetoothDevices>>,
     pub led_controller: Arc<LedController>,
+    instance_id: u32,
 }
 
 fn display_address(addr: &BdAddr) -> impl Display {
@@ -51,11 +53,18 @@ fn display_address(addr: &BdAddr) -> impl Display {
 
 impl App {
     pub fn new(led_controller: LedController) -> Self {
+        let rng = Rng::new();
+        let instance_id: u32 = rng.random();
         Self {
             websocket_channel: Arc::new(WebsocketChannel::new()),
             bluetooth_devices: Arc::new(Mutex::new(Box::new(Deque::new()))),
             led_controller: Arc::new(led_controller),
+            instance_id,
         }
+    }
+
+    pub fn get_instance_id(&self) -> u32 {
+        self.instance_id
     }
 
     pub async fn extend_bluetooth_devices(&self, new_devices: impl Iterator<Item=BluetoothDevice>) {

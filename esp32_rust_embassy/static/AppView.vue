@@ -21,6 +21,7 @@ const background_task_message = ref(null);
 const ping_value = ref(null);
 const pong_value = ref(null);
 const uptime_seconds = ref(null);
+const app_instances = ref([]);
 const is_connection_synchronised = computed(() => ping_value.value === pong_value.value);
 
 const responses = ref([]);
@@ -75,10 +76,6 @@ function disconnect_from_websocket() {
   websocket.value.close();
 }
 
-function clear_responses() {
-  responses.value.length = 0;
-}
-
 function send_message() {
   if (websocket.value === null) return;
   if (websocket_state.value !== WebSocket.OPEN) return;
@@ -128,6 +125,16 @@ function handle_websocket_response(data) {
       const microseconds_per_second = BigInt(1000000);
       const seconds = Number(res.total_microseconds/microseconds_per_second); // cannot mix Number and BigInt types
       uptime_seconds.value = seconds;
+    } else if (res.type === "app_instance_id") {
+      const id = res.id;
+      const instances = app_instances.value;
+      const curr_instance = instances[instances.length-1];
+      if (curr_instance === undefined || curr_instance.id !== id) {
+        instances.push({
+          time_millis: Date.now(),
+          id: id,
+        });
+      }
     } else {
       console.log(res);
     }
@@ -142,15 +149,6 @@ function refresh_led_duty_cycle() {
   websocket.value.send(c.get_led_duty_cycle());
 }
 
-function send_ping() {
-  if (websocket.value === null) return;
-  let c = websocket_command_creator;
-  let value = random_u32();
-  ping_value.value = value;
-  websocket.value.send(c.send_ping(value));
-  websocket.value.send(c.get_uptime());
-}
-
 function format_uptime(seconds) {
   const dhms = seconds_to_dhms(seconds);
   let text = "";
@@ -161,6 +159,18 @@ function format_uptime(seconds) {
   return text;
 }
 
+function format_datetime(time_millis) {
+  const datetime = new Date(time_millis);
+  const pad = n => String(n).padStart(2, '0');
+
+  const day = pad(datetime.getDate());
+  const month = pad(datetime.getMonth()+1);
+  const hours = pad(datetime.getHours());
+  const minutes = pad(datetime.getMinutes());
+  const seconds = pad(datetime.getSeconds());
+  return `${day}/${month}-${hours}:${minutes}:${seconds}`;
+}
+
 onMounted(() => {
   if (is_auto_connect.value) {
     connect_to_websocket();
@@ -169,25 +179,35 @@ onMounted(() => {
   refresh_heap_stats();
 });
 
-let ping_interval_id = ref(null);
+const BACKGROUND_TASK_INTERVAL_MILLIS = 1000;
+let background_task_id = ref(null);
+function run_background_task() {
+  if (websocket.value === null) return;
+  if (websocket_state.value !== WebSocket.OPEN) return;
+  let c = websocket_command_creator;
+  let value = random_u32();
+  ping_value.value = value;
+  websocket.value.send(c.send_ping(value));
+  websocket.value.send(c.get_uptime());
+  websocket.value.send(c.get_app_instance_id());
+}
 
 watch(is_websocket_open, (is_open) => {
-  if (ping_interval_id.value !== null) {
-    clearInterval(ping_interval_id.value);
-    ping_interval_id.value = null;
+  if (background_task_id.value !== null) {
+    clearInterval(background_task_id.value);
+    background_task_id.value = null;
   }
   if (is_open) {
-    const PING_INTERVAL_MS = 1000;
     refresh_led_duty_cycle();
-    ping_interval_id.value = setInterval(() => {
+    background_task_id.value = setInterval(() => {
       try {
-        send_ping();
+        run_background_task();
       } catch (err) {
-        console.log(`Ping failed: ${err}`);
-        clearInterval(ping_interval_id.value);
-        ping_interval_id.value = null;
+        console.log(`Background task failed: ${err}`);
+        clearInterval(background_task_id.value);
+        background_task_id.value = null;
       }
-    }, PING_INTERVAL_MS);
+    }, BACKGROUND_TASK_INTERVAL_MILLIS);
   } else {
     if (is_auto_connect.value) {
       auto_connect_attempts.value += 1;
@@ -215,117 +235,139 @@ watch(led_duty_cycle, (led_duty_cycle) => {
   <button v-else @click="disconnect_from_websocket">Disconnect</button>
 </div>
 <div>
-  <input type="text" v-model="message">
-  <button @click="send_message" :disabled="!is_websocket_open">Send</button>
-</div>
-<br>
-<div>
   <span>Auto connect: </span>
   <input type="checkbox" v-model.boolean="is_auto_connect">
 </div>
-<div>
-  <span>LED: </span>
-  <input type="range" v-model.number="led_duty_cycle" min="0" max="100">
-  <button @click="refresh_led_duty_cycle" :disabled="!is_websocket_open">Refresh</button>
-</div>
 <br>
-<table>
-  <thead>
-    <tr>
-      <th>field</th>
-      <th>value</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Background task message</td>
-      <td>{{ background_task_message === null ? "?" : background_task_message }}</td>
-    </tr>
-    <tr>
-      <td>Ping</td>
-      <td>{{ ping_value === null ? "?" : ping_value }}</td>
-    </tr>
-    <tr>
-      <td>Pong</td>
-      <td>{{ pong_value === null ? "?" : pong_value }}</td>
-    </tr>
-    <tr>
-      <td>Connection synchronised</td>
-      <td>{{ is_connection_synchronised }}</td>
-    </tr>
-    <tr>
-      <td>Uptime</td>
-      <td>{{ uptime_seconds === null ? "?" : format_uptime(uptime_seconds) }}</td>
-    </tr>
-    <tr>
-      <td>Auto connect attempts</td>
-      <td>{{ auto_connect_attempts }}</td>
-    </tr>
-  </tbody>
-</table>
-<br>
-<div>
-  <b>Responses ({{ responses.length }})</b>
-  <button @click="clear_responses">Clear</button>
+<div class="d-flex flex-row">
+  <div class="d-flex flex-col">
+    <div>
+      <input type="text" v-model="message">
+      <button @click="send_message" :disabled="!is_websocket_open">Send</button>
+    </div>
+    <div>
+      <span>LED: </span>
+      <input type="range" v-model.number="led_duty_cycle" min="0" max="100">
+      <button class="ml-1" @click="refresh_led_duty_cycle" :disabled="!is_websocket_open">Refresh</button>
+    </div>
+    <br>
+    <b>Application Status</b>
+    <table>
+      <tbody>
+        <tr>
+          <td>Background task message</td>
+          <td>{{ background_task_message === null ? "?" : background_task_message }}</td>
+        </tr>
+        <tr>
+          <td>Ping</td>
+          <td>{{ ping_value === null ? "?" : ping_value }}</td>
+        </tr>
+        <tr>
+          <td>Pong</td>
+          <td>{{ pong_value === null ? "?" : pong_value }}</td>
+        </tr>
+        <tr>
+          <td>Connection synchronised</td>
+          <td>{{ is_connection_synchronised }}</td>
+        </tr>
+        <tr>
+          <td>Uptime</td>
+          <td>{{ uptime_seconds === null ? "?" : format_uptime(uptime_seconds) }}</td>
+        </tr>
+        <tr>
+          <td>Auto connect attempts</td>
+          <td>{{ auto_connect_attempts }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <br>
+    <div>
+      <b>Application Instances ({{ app_instances.length }})</b>
+      <button class="ml-1" @click="() => { app_instances.length = 0; }">Clear</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>index</th><th>time</th><th>id</th></tr>
+      </thead>
+      <tbody>
+        <tr v-for="(row, index) in app_instances" :key="index">
+          <td>{{ index }}</td>
+          <td>{{ format_datetime(row.time_millis) }}</td>
+          <td>{{ row.id }}</td>
+        </tr>
+        <tr v-if="app_instances.length === 0">
+          <td colspan="3">No app instances</td>
+        </tr>
+      </tbody>
+    </table>
+    <br>
+    <div>
+      <b>Responses ({{ responses.length }})</b>
+      <button class="ml-1" @click="() => { responses.length = 0; }">Clear</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>index</th><th>type</th><th>payload</th></tr>
+      </thead>
+      <tbody>
+        <tr v-for="(row, index) in responses" :key="index">
+          <td>{{ index }}</td>
+          <td>{{ row.type }}</td>
+          <td v-if="typeof(row.data) === 'string'">{{ row.data }}</td>
+          <td v-else-if="row.data.join !== undefined">[{{ row.data.join(",") }}]</td>
+          <td v-else>{{ format_object_to_string(row.data) }}</td>
+        </tr>
+        <tr v-if="responses.length === 0">
+          <td colspan="3">No responses</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="d-flex flex-col ml-1">
+    <div>
+      <b>Heap stats</b>
+      <button class="ml-1" @click="refresh_heap_stats" :disabled="is_heap_stats_refreshing">Refresh</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>key</th><th>value</th></tr>
+      </thead>
+      <tbody>
+        <tr v-for="[key, value] in Object.entries(heap_stats)" :key="key">
+          <td>{{ key }}</td>
+          <td><span style="white-space: pre-line">{{ value }}</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <br>
+    <div>
+      <b>Bluetooth devices ({{ bluetooth_devices.length }})</b>
+      <button class="ml-1" @click="refresh_bluetooth_devices" :disabled="is_bluetooth_devices_refreshing">Refresh</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>index</th><th>event kind</th><th>address kind</th><th>address</th><th>rssi</th></tr>
+      </thead>
+      <tbody>
+        <tr v-for="(device, index) in bluetooth_devices" :key="index">
+          <td>{{ index }}</td>
+          <td>{{ device.event_kind }}</td>
+          <td>{{ device.addr_kind }}</td>
+          <td>{{ format_bluetooth_address(device.addr) }}</td>
+          <td>{{ device.rssi }}</td>
+        </tr>
+        <tr v-if="bluetooth_devices.length === 0">
+          <td colspan="5">No bluetooth devices</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>
-<table>
-  <thead>
-    <tr><th>index</th><th>type</th><th>payload</th></tr>
-  </thead>
-  <tbody>
-    <tr v-for="(row, index) in responses" :key="index">
-      <td>{{ index }}</td>
-      <td>{{ row.type }}</td>
-      <td v-if="typeof(row.data) === 'string'">{{ row.data }}</td>
-      <td v-else-if="row.data.join !== undefined">[{{ row.data.join(",") }}]</td>
-      <td v-else>{{ format_object_to_string(row.data) }}</td>
-    </tr>
-    <tr v-if="responses.length === 0">
-      <td colspan="4">No responses</td>
-    </tr>
-  </tbody>
-</table>
-<br>
-<div>
-  <b>Bluetooth devices ({{ bluetooth_devices.length }})</b>
-  <button @click="refresh_bluetooth_devices" :disabled="is_bluetooth_devices_refreshing">Refresh</button>
-</div>
-<table>
-  <thead>
-    <tr><th>index</th><th>event kind</th><th>address kind</th><th>address</th><th>rssi</th></tr>
-  </thead>
-  <tbody>
-    <tr v-for="(device, index) in bluetooth_devices" :key="index">
-      <td>{{ index }}</td>
-      <td>{{ device.event_kind }}</td>
-      <td>{{ device.addr_kind }}</td>
-      <td>{{ format_bluetooth_address(device.addr) }}</td>
-      <td>{{ device.rssi }}</td>
-    </tr>
-    <tr v-if="bluetooth_devices.length === 0">
-      <td colspan="5">No bluetooth devices</td>
-    </tr>
-  </tbody>
-</table>
-<br>
-<div>
-  <b>Heap stats</b>
-  <button @click="refresh_heap_stats" :disabled="is_heap_stats_refreshing">Refresh</button>
-</div>
-<table>
-  <thead>
-    <tr><th>key</th><th>value</th></tr>
-  </thead>
-  <tbody>
-    <tr v-for="[key, value] in Object.entries(heap_stats)" :key="key">
-      <td>{{ key }}</td>
-      <td><span style="white-space: pre-line">{{ value }}</span></td>
-    </tr>
-  </tbody>
-</table>
 </template>
 
 <style scoped>
-
+.ml-1 {
+  margin-left: 0.5rem;
+}
 </style>
 

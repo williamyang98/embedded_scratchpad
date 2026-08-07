@@ -26,6 +26,7 @@ enum CommandHeader {
     GetLedDutyCycle = 0x01,
     Ping = 0x02,
     GetUptime = 0x03,
+    GetAppInstanceId = 0x04,
 }
 
 #[repr(u8)]
@@ -37,6 +38,7 @@ enum ResponseHeader {
     BackgroundTaskMessage = 0x03,
     Pong = 0x04,
     GetUptime = 0x05,
+    GetAppInstanceId = 0x06,
     // errors
     EmptyCommand = 0xFC,
     BadCommandLength = 0xFD,
@@ -116,6 +118,17 @@ async fn handle_binary_message(app: &App, message: &[u8]) -> BinaryMessageRespon
             response[0] = ResponseHeader::GetUptime as u8;
             let uptime_micros: u64 = Instant::now().duration_since_epoch().as_micros();
             response[1..9].copy_from_slice(&uptime_micros.to_le_bytes());
+            response.into()
+        },
+        CommandHeader::GetAppInstanceId => {
+            const EXPECTED_LENGTH: usize = 1;
+            if message.len() != EXPECTED_LENGTH {
+                return BinaryMessageResponse::from_bad_length(header, EXPECTED_LENGTH, message.len());
+            }
+            let mut response = vec![0u8; 5];
+            response[0] = ResponseHeader::GetAppInstanceId as u8;
+            let app_instance_id: u32 = app.get_instance_id();
+            response[1..5].copy_from_slice(&app_instance_id.to_le_bytes());
             response.into()
         },
     }
