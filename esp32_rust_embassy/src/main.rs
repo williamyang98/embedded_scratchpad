@@ -14,7 +14,7 @@
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
-    Async,
+    Blocking,
     clock::CpuClock,
     time::{Duration as EspDuration, Instant},
     timer::timg::{TimerGroup, MwdtStage, Wdt},
@@ -46,7 +46,7 @@ use esp_radio::{
 };
 // web server
 use embassy_net as net;
-use picoserve::{AppRouter, AppBuilder, Config as ServerConfig};
+use picoserve::{AppRouter, AppBuilder, Config as ServerConfig, Timeouts as ServerTimeouts};
 use esp32_d0wd_v3::{
     ble_scanner::ble_scanner_run,
     app::{App, WebsocketWatchValue, MAX_WEBSOCKET_SUBSCRIBERS},
@@ -78,7 +78,7 @@ static MAX_SERVER_CONNECTIONS: usize = MAX_WEBSOCKET_SUBSCRIBERS+1;
 static MAX_NETWORK_SOCKETS: usize = MAX_SERVER_CONNECTIONS+1; 
 static NET_STACK_RESOURCES: StaticCell<net::StackResources<MAX_NETWORK_SOCKETS>> = StaticCell::new();
 static WEB_SERVER_ROUTER: StaticCell<AppRouter<WebServer>> = StaticCell::new();
-static WEB_SERVER_CONFIG: ServerConfig = ServerConfig::const_default().keep_connection_alive();
+static WEB_SERVER_CONFIG: StaticCell<ServerConfig> = StaticCell::new();
 
 #[allow(
     clippy::large_stack_frames,
@@ -151,6 +151,8 @@ async fn main_core_0(spawner: Spawner) -> ! {
     led.set_low();
     // led.set_high();
     let led_controller = LedController::new(peripherals.LEDC, led);
+    led_controller.set_duty_cycle(5).expect("Failed to set initial led pwm duty cycle");
+
     let app = Arc::new(App::new(led_controller));
 
     let spi = Spi::new(peripherals.SPI2, SpiMasterConfig::default())
@@ -158,8 +160,7 @@ async fn main_core_0(spawner: Spawner) -> ! {
         .with_sck(peripherals.GPIO18)
         .with_miso(peripherals.GPIO19)
         .with_mosi(peripherals.GPIO23)
-        .with_cs(peripherals.GPIO5)
-        .into_async();
+        .with_cs(peripherals.GPIO5);
 
     let messages_channel = &*CHANNEL_MESSAGE.init(Channel::new());
     let core_1_stack = CORE_1_STACK.init(Box::new(Stack::new()));
@@ -200,7 +201,14 @@ async fn main_core_0(spawner: Spawner) -> ! {
     // web server allocates a large stack for picoserve::Server so do this inside main where we permit it
     let web_server = WebServer { app };
     let web_server_router = WEB_SERVER_ROUTER.init(web_server.build_app());
-    let web_server_config = &WEB_SERVER_CONFIG;
+    let web_server_timeouts = ServerTimeouts {
+        start_read_request: Duration::from_secs(5),
+        persistent_start_read_request: Duration::from_secs(1),
+        read_request: Duration::from_secs(3),
+        write: Duration::from_secs(3),
+    };
+    let web_server_config = ServerConfig::new(web_server_timeouts.clone()).keep_connection_alive();
+    let web_server_config = WEB_SERVER_CONFIG.init(web_server_config);
     log::info!("Spawning server instances to handle {MAX_SERVER_CONNECTIONS} connections");
     for server_id in 0..MAX_SERVER_CONNECTIONS {
         let server_id = format!("Server connection {server_id}");
@@ -249,7 +257,7 @@ async fn receive_messages_task(app: Arc<App>, messages_channel: &'static Message
     let mut counter: u32 = 0;
     loop {
         let message = messages_channel.receive().await;
-        log::info!("Hello world counter={counter}, message={message}!");
+        log::info!("counter={counter}, message={message}!");
         match app.get_websocket_publisher() {
             Ok(publisher) => publisher.publish_immediate(WebsocketWatchValue::BackgroundTaskMessage { message }),
             Err(err) => log::error!("Couldn't acquire publisher to send background message: {err:?}"),
@@ -349,7 +357,8 @@ pub async fn run_server_task(id: String, router: &'static AppRouter<WebServer>, 
 }
 
 #[embassy_executor::task]
-pub async fn run_led_spi_write_task(mut spi: Spi<'static, Async>) -> ! {
+pub async fn run_led_spi_write_task(spi: Spi<'static, Blocking>) -> ! {
+    let mut spi = spi.into_async();
     const BLINK_PERIOD: Duration = Duration::from_millis(100);
     let mut counter: u8 = 0;
     loop {
