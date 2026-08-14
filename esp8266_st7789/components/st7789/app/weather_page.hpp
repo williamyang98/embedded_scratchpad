@@ -67,8 +67,9 @@ private:
         }
     } m_printers;
     rgb565_t m_text_colour = COLOUR.WHITE;
-    uint16_t m_x_margin = 10;
-    uint16_t m_y_margin = 9;
+    uint16_t m_x_margin = 12;
+    uint16_t m_y_large_margin = 10;
+    uint16_t m_y_small_margin = 7;
     struct {
         RadialBackgroundColour freezing;
         RadialBackgroundColour cold;
@@ -128,23 +129,23 @@ public:
         {
             uint16_t y_text_end = 0;
             // large text
-            y_text_end += m_y_margin+large_font::MAX_HEIGHT;
+            y_text_end += m_y_large_margin+large_font::MAX_HEIGHT;
             m_printers.time.y_end = y_text_end-1;
-            y_text_end += m_y_margin+large_font::MAX_HEIGHT;
+            y_text_end += m_y_large_margin+large_font::MAX_HEIGHT;
             m_printers.temperature.y_end = y_text_end-1;
-            y_text_end += m_y_margin+large_font::MAX_HEIGHT;
+            y_text_end += m_y_large_margin+large_font::MAX_HEIGHT;
             m_printers.humidity.y_end = y_text_end-1;
             m_printers.weather_icon.y_end = (m_printers.temperature.y_end+m_printers.humidity.y_end)/2;
             // small text
-            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            y_text_end += m_y_large_margin+small_font::MAX_HEIGHT;
             m_printers.location.y_end = y_text_end-1;
-            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            y_text_end += m_y_small_margin+small_font::MAX_HEIGHT;
             m_printers.weather_description.y_end = y_text_end-1;
-            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            y_text_end += m_y_small_margin+small_font::MAX_HEIGHT;
             m_printers.rain.y_end = y_text_end-1;
-            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            y_text_end += m_y_small_margin+small_font::MAX_HEIGHT;
             m_printers.wind.y_end = y_text_end-1;
-            y_text_end += m_y_margin+small_font::MAX_HEIGHT;
+            y_text_end += m_y_small_margin+small_font::MAX_HEIGHT;
             m_printers.moon.y_end = y_text_end-1;
         }
         m_printers.set_text_colour(m_text_colour);

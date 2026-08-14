@@ -21,7 +21,18 @@ def get_char_name(char):
     return name
 
 class FontGlyph:
-    def __init__(self, image, char):
+    def __init__(self, font, char):
+        self.font = font
+
+        left, top, right, bottom = font.getbbox(char)
+        width = right-left
+        height = bottom-top
+        advance = int(font.getlength(char))
+        image = Image.new("L", (advance, height), GLYPH_BACKGROUND_COLOUR)
+        drawer = ImageDraw.Draw(image)
+        drawer.text((-left, -top), char, font=self.font, fill=GLYPH_TEXT_COLOUR)
+        image = np.array(image)
+
         self.image = image
         self.char = char
         self.name = get_char_name(char)
@@ -31,6 +42,9 @@ class FontGlyph:
         assert image.dtype == np.uint8, f"Font glyph image must be np.uint8 but got {image.dtype}"
         self.width = width
         self.height = height
+        self.top = top
+        self.bottom = bottom
+        self.advance = advance
         self.encoding = None
         self.encoded_image = None
 
@@ -46,16 +60,12 @@ class FontGlyph:
     def compression_ratio(self):
         return self.encoded_size_bytes/self.original_size_bytes
 
-    def pad_to_height(self, height):
-        height_pad = height-self.height
-        assert height_pad >= 0, f"Attempted to trim height of font glyph from {self.height} px to {height} px"
-        if height_pad > 0:
-            # note: padding doesn't add much size since it is amortized by running length encoding compression
-            # worst case scenario is an extra byte, best case scenario is no change
-            y_pad = (height_pad, 0)
-            x_pad = (0, 0)
-            self.image = np.pad(self.image, [y_pad, x_pad], mode="constant", constant_values=GLYPH_BACKGROUND_COLOUR)
-            self.height = height
+    def pad(self, x_pad, y_pad):
+        # note: padding doesn't add much size since it is amortized by running length encoding compression
+        # worst case scenario is an extra byte, best case scenario is no change
+        self.image = np.pad(self.image, [y_pad, x_pad], mode="constant", constant_values=GLYPH_BACKGROUND_COLOUR)
+        self.height = self.image.shape[0]
+        self.width = self.image.shape[1]
 
     def encode(self, encoding):
         encoder = Encoding.get_function(encoding)
@@ -87,24 +97,18 @@ class FontGlyphs:
         self.chars = chars
         self.encoding = encoding
 
-        self.glyphs = []
-        for char in self.chars:
-            bbox = self.font.getbbox(char)
-            width = bbox[2]-bbox[0]
-            height = bbox[3]-bbox[1]
-            image = Image.new("L", (width, height), GLYPH_BACKGROUND_COLOUR)
-            drawer = ImageDraw.Draw(image)
-            drawer.text((-bbox[0], -bbox[1]), char, font=self.font, fill=GLYPH_TEXT_COLOUR)
-            image = np.array(image)
-            glyph = FontGlyph(image, char)
-            self.glyphs.append(glyph)
+        self.glyphs = [FontGlyph(font, char) for char in self.chars]
+        self.min_top = min((glyph.top for glyph in self.glyphs))
+        self.max_bottom = max((glyph.bottom for glyph in self.glyphs))
+
+        for glyph in self.glyphs:
+            pad_top = glyph.top-self.min_top
+            pad_bottom = self.max_bottom-glyph.bottom
+            glyph.pad((0, 0), (pad_top, pad_bottom))
+            glyph.encode(self.encoding)
 
         self.max_height = max((glyph.height for glyph in self.glyphs))
         self.max_width = max((glyph.width for glyph in self.glyphs))
-
-        for glyph in self.glyphs:
-            glyph.pad_to_height(self.max_height)
-            glyph.encode(self.encoding)
 
     def print_stats(self):
         table_headers = ["glyph", "width", "height", "original_size", "encoded_size", "ratio", "name"]
@@ -196,7 +200,8 @@ def get_formatted_namespace(name):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("font", default="./scripts/fonts/SpaceGrotesk-Medium.ttf", nargs="?", help="Truefont filepath")
-    parser.add_argument("--output", default=None, help="Filepath for generated header file")
+    parser.add_argument("--output", default=None, type=str, help="Filepath for generated header file")
+    parser.add_argument("--atlas", default=None, type=str, help="Filepath for generated image glyph atlas for inspecting what they will look like")
     parser.add_argument("--namespace", default=None, help="Namespace used by generated header file")
     parser.add_argument("--size", default=64, type=float, help="Font size")
     parser.add_argument("--glyphs", default="0123456789CF", type=str, help="Glyphs to generate")
@@ -209,12 +214,18 @@ def main():
     font_filename = os.path.basename(args.font)
     font_basename = os.path.splitext(font_filename)[0]
     formatted_namespace = get_formatted_namespace(font_basename)
-    output_filepath = args.output
-    if output_filepath == None:
-        output_filepath = os.path.join("./components/st7789/glyphs", f"{formatted_namespace}.hpp")
     namespace = args.namespace
     if namespace == None:
         namespace = formatted_namespace
+
+    cpp_header_output_filepath = args.output
+    DEFAULT_OUTPUT_PATH = "./components/st7789/glyphs"
+    if cpp_header_output_filepath == None:
+        cpp_header_output_filepath = os.path.join(DEFAULT_OUTPUT_PATH, f"{namespace}.hpp")
+    glyph_atlas_output_filepath = args.atlas
+    if glyph_atlas_output_filepath == None:
+        glyph_atlas_output_filepath = os.path.join(DEFAULT_OUTPUT_PATH, f"{namespace}_glyph_atlas.png")
+
 
     with open(args.font, "rb") as fp:
         font = ImageFont.truetype(fp, args.size)
@@ -235,12 +246,24 @@ def main():
 
     font_glyphs = FontGlyphs(namespace, font, glyphs, args.encoding)
     font_glyphs.print_stats()
+
     cpp_header = font_glyphs.get_cpp_string()
-    print(f"Writing c++ header to: {output_filepath}")
-    output_dirpath = os.path.dirname(output_filepath)
-    os.makedirs(output_dirpath, exist_ok=True)
-    with open(output_filepath, "w") as fp:
+    print(f"Writing c++ header to: {cpp_header_output_filepath}")
+    cpp_header_output_dirpath = os.path.dirname(cpp_header_output_filepath)
+    os.makedirs(cpp_header_output_dirpath, exist_ok=True)
+    with open(cpp_header_output_filepath, "w") as fp:
         fp.write(cpp_header)
+
+    images = [glyph.image for glyph in font_glyphs.glyphs]
+    assert len(images) > 0, "No glyphs present to generate glyph atlas"
+    glyph_atlas = np.concatenate(images, axis=1)
+    glyph_atlas_image = Image.fromarray(glyph_atlas)
+    print(f"Writing glyph atlas to: {glyph_atlas_output_filepath}")
+    glyph_atlas_output_dirpath = os.path.dirname(glyph_atlas_output_filepath)
+    os.makedirs(glyph_atlas_output_dirpath, exist_ok=True)
+    with open(glyph_atlas_output_filepath, "wb+") as fp:
+        glyph_atlas_image.save(fp)
+
 
 if __name__ == "__main__":
     main()
